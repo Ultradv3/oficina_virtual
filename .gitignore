@@ -1,0 +1,15 @@
+node_modules
+.nuxt
+.output
+.data
+data
+dist
+.env
+*.log
+.DS_Store
+.playwright-mcp
+office-*.png
+verify-*.png
+oc-serve.log
+dev.log
+.opencode-docker

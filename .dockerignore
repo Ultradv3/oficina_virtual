@@ -1,0 +1,11 @@
+node_modules
+.nuxt
+.output
+.data
+data
+.git
+.env
+*.log
+.playwright-mcp
+office-*.png
+verify-*.png
