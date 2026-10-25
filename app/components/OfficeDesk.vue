@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import type {
   Group,
-  MeshBasicNodeMaterial,
-  MeshStandardNodeMaterial,
   SpriteNodeMaterial,
 } from 'three/webgpu'
-import { CanvasTexture, SRGBColorSpace } from 'three/webgpu'
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { useLoop } from '@tresjs/core/webgpu'
+import {
+  CanvasTexture,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  MathUtils,
+  SRGBColorSpace,
+} from 'three/webgpu'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { useLoop, useTres, useTresContext } from '@tresjs/core/webgpu'
 import type { OfficeAgent } from '~/types/office'
+import { prefersReducedMotion } from '~/composables/useMotionPreference'
 import { statusMeta } from '~/utils/status'
 import { LEGO, minifigTorso } from '~/utils/lego'
+import { getLegoMaterial, getLegoWear } from '~/utils/lego-materials'
+import { DESK_LAYOUT, getDeskProps, getMonitorPlacements } from '~/utils/desk-layout'
+import DeskMonitor from './lego/DeskMonitor.vue'
 import LegoBox from './lego/LegoBox.vue'
 import LegoMinifig from './lego/LegoMinifig.vue'
 import LegoShadow from './lego/LegoShadow.vue'
@@ -24,18 +32,46 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [id: string] }>()
 
-const ringMat = shallowRef<MeshStandardNodeMaterial>()
-const ledMat = shallowRef<MeshStandardNodeMaterial>()
+const { renderer } = useTres()
+const { isInitialized } = useTresContext().renderer
+
 const glowMat = shallowRef<SpriteNodeMaterial>()
 const labelMaterial = shallowRef<SpriteNodeMaterial>()
-const screenMaterial = shallowRef<MeshBasicNodeMaterial>()
 const screenTexture = shallowRef<CanvasTexture>()
 const keyboardTexture = shallowRef<CanvasTexture>()
 const hovered = ref(false)
 const figure = shallowRef<Group>()
+const entrance = shallowRef<Group>()
+let appearStart = 0
 
 const accent = minifigTorso(props.agent.name)
 const phase = props.index * 1.37
+
+const monitorPlacements = computed(() => getMonitorPlacements(props.agent.name))
+const deskProps = computed(() => getDeskProps(props.agent.name))
+
+// Microvariación de materiales (T030): el desgaste se deriva del agente y se
+// sirve desde la caché compartida, sin crear un material por escritorio.
+const wear = getLegoWear(`${props.agent.name}|desk`)
+const mugMaterial = getLegoMaterial({ color: LEGO.white, roughness: 0.28, wear })
+const baseMaterial = getLegoMaterial({
+  color: LEGO.charcoal,
+  roughness: 0.35,
+  wear: getLegoWear(`${props.agent.name}|base`),
+})
+
+// Densidad 2x de las texturas (T029 / FR-022): se dibuja en un lienzo lógico
+// y se renderiza al doble de resolución. La etiqueta es un chip pequeño
+// (1.6 × 0.36 en el sprite), con lienzo lógico 640x144 y la misma relación de
+// aspecto para no deformar el texto.
+const LABEL_WIDTH = 1280
+const LABEL_HEIGHT = 288
+const LABEL_SCALE = 2
+const SCREEN_WIDTH = 1280
+const SCREEN_HEIGHT = 800
+const SCREEN_SCALE = 2
+/** Anisotropía máxima soportada, acotada a 8 (FR-022). */
+const MAX_ANISOTROPY = 8
 
 let glowTexture: CanvasTexture | null = null
 let labelTexture: CanvasTexture | null = null
@@ -43,6 +79,32 @@ let labelTexture: CanvasTexture | null = null
 // estado cambian de verdad (no en cada refresco SSE con el mismo estado).
 let labelKey = ''
 let screenKey = ''
+
+/**
+ * Calidad de muestreo compartida por las texturas de canvas: anisotropía hasta 8,
+ * mipmaps y filtro trilineal para que las etiquetas se lean nítidas a 1024x768.
+ * Si el backend no expone anisotropía se deja en 1 sin romper nada.
+ */
+function textureAnisotropy(): number {
+  try {
+    const value = renderer.getMaxAnisotropy()
+    return Number.isFinite(value) && value > 0 ? Math.min(MAX_ANISOTROPY, value) : 1
+  } catch {
+    return 1
+  }
+}
+
+function configureTextureQuality(texture: CanvasTexture) {
+  texture.anisotropy = textureAnisotropy()
+  // Los canvas 1280x288 y 1280x800 no son potencias de dos; en WebGPU y en el
+  // fallback WebGL2 moderno los mipmaps siguen siendo válidos. Si un backend
+  // concreto no los generase, three mantiene la textura y solo pierde el
+  // filtrado trilineal (no hay error visible).
+  texture.generateMipmaps = true
+  texture.minFilter = LinearMipmapLinearFilter
+  texture.magFilter = LinearFilter
+  texture.needsUpdate = true
+}
 
 function makeGlowTexture(): CanvasTexture {
   const canvas = document.createElement('canvas')
@@ -73,46 +135,44 @@ function buildLabel() {
   if (key === labelKey) return
   const meta = statusMeta(props.agent.status)
   const canvas = document.createElement('canvas')
-  canvas.width = 640
-  canvas.height = 160
+  canvas.width = LABEL_WIDTH
+  canvas.height = LABEL_HEIGHT
   const context = canvas.getContext('2d')
   if (!context) return
 
-  context.clearRect(0, 0, 640, 160)
-  context.save()
-  context.shadowColor = 'rgba(5, 9, 14, 0.45)'
-  context.shadowBlur = 18
-  context.shadowOffsetY = 6
-  rounded(context, 8, 8, 624, 142, 30)
-  context.fillStyle = '#f4efe4'
-  context.fill()
-  context.restore()
+  // Chip discreto: fondo oscuro translúcido, nombre claro y un punto de estado
+  // diminuto. Se dibuja con coordenadas lógicas 640x144 y se escala x2 en el
+  // lienzo; el material del sprite aporta la opacidad global (~0.7).
+  context.scale(LABEL_SCALE, LABEL_SCALE)
+  context.clearRect(0, 0, 640, 144)
 
-  rounded(context, 8, 8, 624, 142, 30)
-  context.lineWidth = 6
+  rounded(context, 10, 12, 620, 120, 34)
+  context.fillStyle = 'rgba(9, 14, 21, 0.9)'
+  context.fill()
+
+  context.save()
+  context.globalAlpha = 0.34
+  rounded(context, 10, 12, 620, 120, 34)
+  context.lineWidth = 3
   context.strokeStyle = meta.color
   context.stroke()
+  context.restore()
 
+  // Punto de estado opcional, alineado con el nombre.
   context.beginPath()
-  context.arc(62, 79, 16, 0, Math.PI * 2)
+  context.arc(52, 72, 12, 0, Math.PI * 2)
   context.fillStyle = meta.color
   context.fill()
-  context.beginPath()
-  context.arc(62, 79, 5, 0, Math.PI * 2)
-  context.fillStyle = '#f4efe4'
-  context.fill()
 
-  context.fillStyle = '#1c2531'
-  context.font = '700 44px Inter, Segoe UI, sans-serif'
-  const name = props.agent.name.length > 15 ? `${props.agent.name.slice(0, 14)}…` : props.agent.name
-  context.fillText(name, 96, 74)
-
-  context.fillStyle = '#5b6675'
-  context.font = '600 24px Inter, Segoe UI, sans-serif'
-  context.fillText(meta.label.toUpperCase().split('').join(' '), 96, 116)
+  context.fillStyle = '#eef3f8'
+  context.font = '600 56px Inter, Segoe UI, sans-serif'
+  context.textBaseline = 'middle'
+  const name = props.agent.name.length > 16 ? `${props.agent.name.slice(0, 15)}…` : props.agent.name
+  context.fillText(name, 84, 74, 530)
 
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
+  configureTextureQuality(texture)
   const previous = labelMaterial.value.map
   labelMaterial.value.map = texture
   labelMaterial.value.needsUpdate = true
@@ -122,16 +182,17 @@ function buildLabel() {
 }
 
 function buildScreen() {
-  if (!screenMaterial.value) return
   const key = `${props.agent.name}|${props.agent.status}`
   if (key === screenKey) return
   const meta = statusMeta(props.agent.status)
   const canvas = document.createElement('canvas')
-  canvas.width = 640
-  canvas.height = 400
+  canvas.width = SCREEN_WIDTH
+  canvas.height = SCREEN_HEIGHT
   const context = canvas.getContext('2d')
   if (!context) return
 
+  // Coordenadas lógicas 640x400 escaladas x2 en el lienzo (T029).
+  context.scale(SCREEN_SCALE, SCREEN_SCALE)
   context.fillStyle = '#0b1219'
   context.fillRect(0, 0, 640, 400)
   context.fillStyle = '#111c26'
@@ -188,11 +249,10 @@ function buildScreen() {
 
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
-  const previous = screenMaterial.value.map
-  screenMaterial.value.map = texture
-  screenMaterial.value.needsUpdate = true
-  previous?.dispose()
+  configureTextureQuality(texture)
+  const previous = screenTexture.value
   screenTexture.value = texture
+  previous?.dispose()
   screenKey = key
 }
 
@@ -216,6 +276,7 @@ function buildKeyboard() {
   context.fill()
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
+  configureTextureQuality(texture)
   keyboardTexture.value = texture
 }
 
@@ -225,26 +286,36 @@ onRender(({ elapsed }) => {
   const time = elapsed + phase
   const status = props.agent.status
 
-  if (ringMat.value) {
-    const base = props.selected ? 0.72 : hovered.value ? 0.5 : 0.24
-    ringMat.value.opacity = base + Math.sin(time * 2) * (props.selected ? 0.1 : 0.03)
-  }
-
-  if (ledMat.value) {
-    ledMat.value.emissiveIntensity =
-      status === 'disconnected' ? 0.15 : 1.1 + Math.sin(time * 3.2) * 0.3
-  }
-
   if (glowMat.value) {
     const base =
       status === 'disconnected' ? 0.05 : status === 'waiting_approval' ? 0.46 : 0.3
     const pulse = status === 'working' || status === 'waiting_approval' ? Math.sin(time * 3.6) * 0.08 : 0
     glowMat.value.opacity = base + pulse
   }
+
+  // Escalonado de entrada de los escritorios (T041 / FR-028).
+  const group = entrance.value
+  if (group) {
+    if (prefersReducedMotion()) {
+      group.scale.setScalar(1)
+      group.position.y = 0
+    } else {
+      const progress = Math.min(1, Math.max(0, (performance.now() - appearStart) / 420))
+      const eased = 1 - (1 - progress) ** 3
+      group.scale.setScalar(MathUtils.lerp(0.94, 1, eased))
+      group.position.y = MathUtils.lerp(0.35, 0, eased)
+    }
+  }
 })
 
 onMounted(() => {
+  appearStart = performance.now() + props.index * 90
+  if (entrance.value && prefersReducedMotion()) {
+    entrance.value.scale.setScalar(1)
+    entrance.value.position.y = 0
+  }
   glowTexture = makeGlowTexture()
+  if (glowTexture) configureTextureQuality(glowTexture)
   if (glowMat.value) {
     glowMat.value.map = glowTexture
     // Fuerza el rebuild del grafo si el material ya se compiló sin textura.
@@ -254,6 +325,19 @@ onMounted(() => {
   buildScreen()
   buildKeyboard()
 })
+
+// El renderer se inicializa de forma asíncrona: cuando está listo se reaplica la
+// anisotropía real a las texturas que ya se habían creado.
+watch(
+  () => isInitialized.value,
+  (ready) => {
+    if (!ready) return
+    const textures = [labelTexture, screenTexture.value, keyboardTexture.value, glowTexture]
+    for (const texture of textures) {
+      if (texture) configureTextureQuality(texture)
+    }
+  },
+)
 
 watch(
   () => `${props.agent.name}|${props.agent.status}`,
@@ -267,7 +351,6 @@ onBeforeUnmount(() => {
   labelTexture?.dispose()
   labelMaterial.value?.dispose()
   screenTexture.value?.dispose()
-  screenMaterial.value?.dispose()
   keyboardTexture.value?.dispose()
   glowTexture?.dispose()
   glowMat.value?.dispose()
@@ -281,25 +364,14 @@ function select() {
 <template>
   <TresGroup
     :position="position"
+    :rotation="[0, DESK_LAYOUT.groupRotationY, 0]"
     :scale="hovered && !selected ? 1.012 : 1"
     @click="select"
     @pointer-enter="hovered = true"
     @pointer-leave="hovered = false"
   >
-    <LegoShadow :position="[0.12, 0.015, -0.34]" :size="[3.4, 2.75]" :opacity="0.32" />
-
-    <TresMesh :rotation="[-Math.PI / 2, 0, 0]" :position="[0, 0.032, 0]">
-      <TresRingGeometry :args="[1.6, 1.76, 64]" />
-      <TresMeshStandardNodeMaterial
-        ref="ringMat"
-        :color="statusMeta(agent.status).color"
-        :emissive="statusMeta(agent.status).color"
-        :emissive-intensity="1.4"
-        :transparent="true"
-        :opacity="0.3"
-        :side="2"
-      />
-    </TresMesh>
+    <TresGroup ref="entrance">
+    <LegoShadow :position="[0.12, 0.015, 0.32]" :size="[3.4, 3.2]" :opacity="0.32" />
 
     <TresGroup :position="[0, 0.02, 0]">
       <LegoBox :position="[0, 0.8, 0]" :size="[2.55, 0.14, 1.18]" :color="LEGO.warmWhite" :radius="0.05" />
@@ -322,41 +394,21 @@ function select() {
         <LegoBox :position="[0, 0.28, 0.47]" :size="[0.16, 0.035, 0.03]" :color="LEGO.navy" :radius="0.015" />
       </TresGroup>
 
-      <TresGroup :position="[-0.68, 0.9, -0.28]" :rotation="[0, 0.18, 0]">
-        <LegoBox :position="[0, 0.02, 0]" :size="[0.7, 0.06, 0.38]" :color="LEGO.charcoal" :radius="0.02" />
-        <LegoBox :position="[0, 0.18, -0.02]" :size="[0.09, 0.32, 0.09]" :color="LEGO.darkGray" :radius="0.02" />
-        <TresGroup :position="[0, 0.46, 0]" :rotation="[-0.05, 0, 0]">
-          <LegoBox :position="[0, 0, 0]" :size="[1.34, 0.8, 0.1]" :color="LEGO.charcoal" :radius="0.04" />
-          <TresMesh :position="[0, 0.01, 0.056]">
-            <TresPlaneGeometry :args="[1.2, 0.66]" />
-            <TresMeshBasicNodeMaterial
-              ref="screenMaterial"
-              :map="screenTexture"
-              :tone-mapped="false"
-            />
-          </TresMesh>
-          <TresMesh :position="[0.53, -0.3, 0.07]">
-            <TresBoxGeometry :args="[0.09, 0.035, 0.02]" />
-            <TresMeshStandardNodeMaterial
-              ref="ledMat"
-              :color="statusMeta(agent.status).color"
-              :emissive="statusMeta(agent.status).color"
-              :emissive-intensity="1.2"
-              :tone-mapped="false"
-            />
-          </TresMesh>
-          <TresMesh :position="[-0.52, 0.44, 0]" :cast-shadow="true">
-            <TresCylinderGeometry :args="[0.07, 0.07, 0.05, 16]" />
-            <TresMeshStandardNodeMaterial :color="LEGO.lightGray" :roughness="0.3" />
-          </TresMesh>
-          <TresMesh :position="[-0.22, 0.44, 0]" :cast-shadow="true">
-            <TresCylinderGeometry :args="[0.07, 0.07, 0.05, 16]" />
-            <TresMeshStandardNodeMaterial :color="LEGO.lightGray" :roughness="0.3" />
-          </TresMesh>
-        </TresGroup>
+      <TresGroup
+        v-for="(monitor, monitorIndex) in monitorPlacements"
+        :key="`monitor-${monitorIndex}`"
+        :position="monitor.position"
+        :rotation="[0, monitor.rotationY, 0]"
+      >
+        <DeskMonitor
+          :screen-texture="screenTexture"
+          :status-color="statusMeta(agent.status).color"
+          :vertical="monitor.vertical"
+          :scale="monitor.scale"
+        />
       </TresGroup>
 
-      <TresSprite :position="[-0.68, 1.45, -0.46]" :scale="[1.95, 1.2, 1]" :render-order="6">
+      <TresSprite :position="[0, 1.45, -0.46]" :scale="[1.95, 1.2, 1]" :render-order="6">
         <TresSpriteNodeMaterial
           ref="glowMat"
           :color="statusMeta(agent.status).color"
@@ -367,30 +419,32 @@ function select() {
         />
       </TresSprite>
 
-      <TresGroup :position="[0.15, 0.88, 0.3]">
+      <TresGroup :position="DESK_LAYOUT.keyboard.position">
         <LegoBox :position="[0, 0, 0]" :size="[0.88, 0.04, 0.3]" :color="LEGO.charcoal" :radius="0.02" />
         <TresMesh :position="[0, 0.024, 0]" :rotation="[-Math.PI / 2, 0, 0]">
           <TresPlaneGeometry :args="[0.8, 0.24]" />
           <TresMeshBasicNodeMaterial :map="keyboardTexture" :tone-mapped="false" />
         </TresMesh>
       </TresGroup>
-      <LegoBox :position="[0.74, 0.9, 0.32]" :size="[0.14, 0.05, 0.2]" :color="LEGO.darkGray" :radius="0.03" />
+      <LegoBox :position="deskProps.notebook" :size="[0.14, 0.05, 0.2]" :color="LEGO.darkGray" :radius="0.03" />
 
-      <TresGroup :position="[-1.02, 0.9, 0.3]">
-        <TresMesh :position="[0, 0.09, 0]" :cast-shadow="true">
+      <TresGroup :position="deskProps.mug">
+        <TresMesh :position="[0, 0.09, 0]" :cast-shadow="true" :material="mugMaterial">
           <TresCylinderGeometry :args="[0.09, 0.08, 0.18, 18]" />
-          <TresMeshStandardNodeMaterial :color="LEGO.white" :roughness="0.28" />
         </TresMesh>
-        <TresMesh :position="[0.1, 0.1, 0]" :rotation="[Math.PI / 2, 0, 0]">
+        <TresMesh
+          :position="[0.1, 0.1, 0]"
+          :rotation="[Math.PI / 2, 0, 0]"
+          :material="mugMaterial"
+        >
           <TresTorusGeometry :args="[0.06, 0.018, 8, 16, Math.PI]" />
-          <TresMeshStandardNodeMaterial :color="LEGO.white" :roughness="0.28" />
         </TresMesh>
       </TresGroup>
 
-      <LegoBox :position="[0.8, 0.9, -0.4]" :size="[0.32, 0.045, 0.24]" :color="LEGO.yellow" :radius="0.015" />
-      <LegoBox :position="[0.81, 0.95, -0.39]" :size="[0.3, 0.045, 0.22]" :color="LEGO.red" :radius="0.015" />
+      <LegoBox :position="deskProps.papers[0]?.position ?? [0.8, 0.9125, -0.4]" :size="[0.32, 0.045, 0.24]" :color="LEGO.yellow" :radius="0.015" />
+      <LegoBox :position="deskProps.papers[1]?.position ?? [0.81, 0.9575, -0.39]" :size="[0.3, 0.045, 0.22]" :color="LEGO.red" :radius="0.015" />
 
-      <TresGroup :position="[-1.02, 0.86, -0.4]">
+      <TresGroup :position="deskProps.lamp">
         <TresMesh :position="[0, 0.025, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.14, 0.16, 0.05, 18]" />
           <TresMeshStandardNodeMaterial :color="LEGO.charcoal" :roughness="0.32" />
@@ -404,7 +458,10 @@ function select() {
             <TresCylinderGeometry :args="[0.06, 0.2, 0.17, 18, 1, true]" />
             <TresMeshStandardNodeMaterial :color="LEGO.navy" :roughness="0.35" :side="2" />
           </TresMesh>
-          <TresMesh :position="[0, -0.03, 0]">
+          <TresMesh
+            :position="[0, -0.03, 0]"
+            :user-data="{ bloomContributor: 'lamp' }"
+          >
             <TresSphereGeometry :args="[0.065, 14, 10]" />
             <TresMeshStandardNodeMaterial color="#ffe6bd" :emissive="'#ffd9a4'" :emissive-intensity="2.4" :tone-mapped="false" />
           </TresMesh>
@@ -412,33 +469,41 @@ function select() {
         <TresPointLight :position="[0.35, 0.58, 0.16]" :intensity="5" :distance="3.1" :decay="2" color="#ffd9a8" />
       </TresGroup>
 
-      <TresGroup :position="[0.15, 0, -1.02]">
-        <TresMesh :position="[0, 0.035, 0]" :cast-shadow="true">
+      <TresGroup :position="DESK_LAYOUT.chair.position" :rotation="[0, DESK_LAYOUT.chair.rotationY, 0]">
+        <TresMesh :position="[0, 0.035, 0]" :cast-shadow="true" :material="baseMaterial">
           <TresCylinderGeometry :args="[0.34, 0.38, 0.07, 5]" />
-          <TresMeshStandardNodeMaterial :color="LEGO.charcoal" :roughness="0.35" />
         </TresMesh>
         <TresMesh :position="[0, 0.2, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.055, 0.055, 0.3, 12]" />
           <TresMeshStandardNodeMaterial color="#3a4756" :roughness="0.3" :metalness="0.2" />
         </TresMesh>
         <LegoBox :position="[0, 0.43, 0.04]" :size="[0.64, 0.1, 0.6]" :color="LEGO.darkGray" :radius="0.04" />
-        <LegoBox :position="[0, 0.71, -0.24]" :size="[0.58, 0.56, 0.1]" :color="accent" :radius="0.04" :rotation="[-0.12, 0, 0]" />
+        <LegoBox :position="[0, 0.71, -0.24]" :size="[0.58, 0.56, 0.1]" :color="LEGO.navy" :radius="0.04" :rotation="[-0.12, 0, 0]" />
         <LegoBox :position="[0, 0.47, 0.25]" :size="[0.52, 0.06, 0.14]" :color="LEGO.charcoal" :radius="0.02" />
       </TresGroup>
 
-      <TresGroup ref="figure" :position="[0.15, 0.02, -0.72]" :rotation="[0, 0.22, 0]">
+      <TresGroup
+        ref="figure"
+        :position="DESK_LAYOUT.agent.position"
+        :rotation="[0, DESK_LAYOUT.agent.rotationY, 0]"
+        :user-data="{ agentId: agent.id, agentMinifig: true }"
+      >
         <LegoMinifig :name="agent.name" :status="agent.status" :phase="index * 1.7" />
       </TresGroup>
 
-      <TresSprite :position="[0, 2.32, -0.05]" :scale="[2.55, 0.64, 1]" :render-order="30">
+      <!-- Etiqueta discreta: chip oscuro pequeño, sin material emisivo y
+           excluido del bloom (T031). -->
+      <TresSprite :position="DESK_LAYOUT.label.position" :scale="DESK_LAYOUT.label.scale" :render-order="30">
         <TresSpriteNodeMaterial
           ref="labelMaterial"
           :transparent="true"
+          :opacity="0.7"
           :depth-test="false"
           :depth-write="false"
           :tone-mapped="false"
         />
       </TresSprite>
+    </TresGroup>
     </TresGroup>
   </TresGroup>
 </template>

@@ -1,7 +1,7 @@
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-24',
   devtools: { enabled: true },
-  modules: ['@tresjs/nuxt'],
+  modules: ['@nuxt/eslint', '@tresjs/nuxt'],
   // Renderer WebGPU de three r186 (node materials). Si el navegador/equipo no
   // expone WebGPU, WebGPURenderer cae automáticamente al backend WebGL2.
   tres: {
@@ -14,7 +14,17 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
+      htmlAttrs: { lang: 'es' },
       title: 'Agent Office · Supervisión de agentes',
+      link: [
+        {
+          rel: 'preload',
+          href: '/fonts/InterVariable.woff2',
+          as: 'font',
+          type: 'font/woff2',
+          crossorigin: 'anonymous',
+        },
+      ],
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         {

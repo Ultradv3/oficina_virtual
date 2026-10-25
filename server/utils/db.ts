@@ -62,6 +62,19 @@ CREATE TABLE IF NOT EXISTS approvals (
   UNIQUE(session_id, external_id)
 );
 
+CREATE TABLE IF NOT EXISTS subtasks (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   connection_id TEXT,
@@ -87,13 +100,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(agent_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
+CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_subtasks_agent ON subtasks(agent_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 `
 
-type DbGlobal = typeof globalThis & { __agentOfficeDb?: Database.Database }
+type DbGlobal = typeof globalThis & {
+  __agentOfficeDb?: Database.Database
+  __agentOfficeSchemaReady?: boolean
+}
 
 export function getDb(): Database.Database {
   const g = globalThis as DbGlobal
@@ -104,8 +122,13 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
     db.pragma('busy_timeout = 5000')
-    db.exec(SCHEMA)
     g.__agentOfficeDb = db
+  }
+  if (!g.__agentOfficeSchemaReady) {
+    // Se ejecuta también sobre bases existentes para aplicar tablas nuevas
+    // (por ejemplo `subtasks`) sin exigir un borrado manual del archivo.
+    g.__agentOfficeDb.exec(SCHEMA)
+    g.__agentOfficeSchemaReady = true
   }
   return g.__agentOfficeDb
 }

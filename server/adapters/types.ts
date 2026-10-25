@@ -52,6 +52,7 @@ export interface RemoteMessage {
 export type NormalizedEventType =
   | 'adapter.status'
   | 'task.status'
+  | 'subtask.created'
   | 'approval.requested'
   | 'approval.replied'
   | 'assistant.text'

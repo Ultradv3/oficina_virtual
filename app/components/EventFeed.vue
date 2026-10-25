@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ActivityEvent } from '~/types/office'
-import { formatTime } from '~/utils/status'
+import { formatAbsolute, timeAgo, toIso } from '~/utils/status'
 
 defineProps<{
   events: ActivityEvent[]
@@ -18,7 +18,9 @@ defineProps<{
         <div class="event-feed__meta">
           <span class="event-feed__agent">{{ event.agentName || 'sistema' }}</span>
           <span class="event-feed__type">{{ event.type }}</span>
-          <time>{{ formatTime(event.createdAt) }}</time>
+          <time :datetime="toIso(event.createdAt)" :title="formatAbsolute(event.createdAt)">
+            {{ timeAgo(event.createdAt) }}
+          </time>
         </div>
         <p class="event-feed__message">{{ event.message }}</p>
       </div>

@@ -133,6 +133,24 @@ export function createOpenCodeAdapter(
     switch (type) {
       case 'server.connected':
         return
+      case 'session.created': {
+        const info = (props.info ?? {}) as Record<string, unknown>
+        const parentID = typeof info.parentID === 'string' ? info.parentID : undefined
+        if (!parentID) return
+        const agent = typeof info.agent === 'string' ? info.agent : undefined
+        emit({
+          type: 'subtask.created',
+          message: typeof info.title === 'string' ? info.title : 'Sesión delegada',
+          agentExternalId: agent,
+          sessionId,
+          payload: {
+            parentSessionId: parentID,
+            agent,
+            title: info.title ?? null,
+          },
+        })
+        return
+      }
       case 'session.status': {
         const status = props.status?.type ?? 'unknown'
         emit({
@@ -387,7 +405,7 @@ export function createOpenCodeAdapter(
       if (!session?.id) throw new Error('OpenCode no devolvió el identificador de sesión')
       input.onSessionCreated?.(session.id)
       try {
-        await request<void>(
+        await request<unknown>(
           `/session/${encodeURIComponent(session.id)}/prompt_async`,
           {
             method: 'POST',

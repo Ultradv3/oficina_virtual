@@ -46,9 +46,24 @@ export interface OfficeAgent {
   capabilities: string[]
   metadata: Record<string, unknown>
   lastSeenAt: number | null
-  currentTask: TaskSummary | null
+  currentTask: (TaskSummary & { delegated?: boolean }) | null
   pendingApprovals: number
   updatedAt: number
+}
+
+export interface SubtaskSummary {
+  id: string
+  taskId: string
+  agentId: string
+  agentName: string | null
+  sessionId: string
+  title: string
+  status: string
+  error: string | null
+  createdAt: number
+  updatedAt: number
+  finishedAt: number | null
+  parentTitle?: string
 }
 
 export interface ApprovalItem {
@@ -110,6 +125,7 @@ export interface AgentDetail {
   tasks: TaskSummary[]
   events: ActivityEvent[]
   approvals: ApprovalItem[]
+  delegations: SubtaskSummary[]
 }
 
 export interface TaskMessage {
@@ -124,6 +140,7 @@ export interface TaskDetail {
   agent: { id: string; name: string; externalId: string; status: AgentStatus } | null
   events: ActivityEvent[]
   approvals: ApprovalItem[]
+  subtasks: SubtaskSummary[]
   messages: TaskMessage[]
   historyError: string | null
 }

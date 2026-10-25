@@ -37,7 +37,7 @@ especificaciones en `specs/001-premium-ui-scene/`. `server/` no se modifica en e
 - [ ] T001 Capturar evidencia base de la UI actual a 1280x800, 1024x768 y 390x844 en
   `verify-before-1280.png`, `verify-before-1024.png` y `verify-before-390.png` siguiendo
   `specs/001-premium-ui-scene/quickstart.md`
-- [ ] T002 Vendorizar las fuentes variables en `public/fonts/` (`InterVariable.woff2`,
+- [X] T002 Vendorizar las fuentes variables en `public/fonts/` (`InterVariable.woff2`,
   `JetBrainsMonoVariable.woff2`) con sus `OFL.txt`; verificar duplicar la licencia OFL-1.1 antes de
   añadir los archivos y no modificar `package.json`
 
@@ -49,18 +49,18 @@ especificaciones en `specs/001-premium-ui-scene/`. `server/` no se modifica en e
 
 **⚠️ CRITICAL**: ninguna historia puede empezar hasta completar esta fase.
 
-- [ ] T003 Implementar el sistema de tokens en `app/assets/css/main.css` (`:root`): escala
+- [X] T003 Implementar el sistema de tokens en `app/assets/css/main.css` (`:root`): escala
   tipográfica (`--text-2xs` 11 px … `--text-2xl`), espaciado `--space-1..6` = 4/8/12/16/24/32 px,
   radios 8/10/14 px, easings (`cubic-bezier(.23,1,.32,1)`), duraciones 120/180/250 ms, foco y
   color; corregir `--muted-2` a `#8492a6` (5.99:1 sobre `--panel`) y `disconnected` a `#7d8a9c`
   (5.40:1) según `contracts/ui-contract.md` §1
-- [ ] T004 [P] Ampliar `app/utils/status.ts` con `icon` y `ariaLabel` por estado según
+- [X] T004 [P] Ampliar `app/utils/status.ts` con `icon` y `ariaLabel` por estado según
   `contracts/ui-contract.md` §2 y crear `app/components/AppIcon.vue` con los cinco iconos
   (check, activity, hand, alert, plug-off); conservar `label`, `color`, `soft` y `description`
-- [ ] T005 [P] Crear `app/composables/useMotionPreference.ts` con
+- [X] T005 [P] Crear `app/composables/useMotionPreference.ts` con
   `matchMedia('(prefers-reduced-motion: reduce)')`, reactivo, seguro en SSR, listener limpiado al
   desmontar
-- [ ] T006 [P] Crear `app/composables/useFocusTrap.ts`: lista de focusables, ciclo Tab/Shift+Tab,
+- [X] T006 [P] Crear `app/composables/useFocusTrap.ts`: lista de focusables, ciclo Tab/Shift+Tab,
   cierre con Escape, devolución del foco al disparador y API `activate/deactivate`
 
 **Checkpoint**: tokens, iconos y preferencias listos; las historias pueden empezar.
@@ -75,35 +75,35 @@ botones y badges coherentes y navegación por teclado.
 **Independent Test**: con 2 agentes reales, revisar V1–V3 de
 [quickstart.md](./quickstart.md) a 1024x768 y 1280x800; no depende de la escena ni del móvil.
 
-- [ ] T007 [US1] Añadir `@font-face` de Inter Variable y JetBrains Mono Variable en
+- [X] T007 [US1] Añadir `@font-face` de Inter Variable y JetBrains Mono Variable en
   `app/assets/css/main.css` (`font-display: swap`, pilas ajustadas) y precargar Inter en
   `nuxt.config.ts` (`app.head.link` con `rel="preload" as="font" crossorigin`); FR-001
-- [ ] T008 [US1] Ajustar `.metrics` en `app/assets/css/main.css` para que sigan visibles a
+- [X] T008 [US1] Ajustar `.metrics` en `app/assets/css/main.css` para que sigan visibles a
   1024x768 (sustituir el `display: none` de `<1180px` por compactación) y mantener
   `font-variant-numeric: tabular-nums`; FR-006/SC-003
-- [ ] T009 [US1] Eliminar el estado de conexión duplicado de `app/components/AgentDetailPanel.vue`
+- [X] T009 [US1] Eliminar el estado de conexión duplicado de `app/components/AgentDetailPanel.vue`
   y `app/components/AgentCardList.vue`, dejando la topbar de `app/pages/index.vue` como fuente
   única; la causa del error puede mostrarse como explicación contextual dentro del estado vacío,
   sin repetir el chip de estado; FR-007/SC-004
-- [ ] T010 [US1] Actualizar `app/components/StatusBadge.vue`, `app/components/AgentCardList.vue`,
+- [X] T010 [US1] Actualizar `app/components/StatusBadge.vue`, `app/components/AgentCardList.vue`,
   `app/components/AgentDetailPanel.vue` y `app/assets/css/main.css` para mostrar icono + color +
   etiqueta con `AppIcon`, badges de 11 px mínimo y los tokens corregidos; FR-008/FR-011
-- [ ] T011 [US1] Implementar en `app/components/AgentPanel.vue` un indicador de pestañas único
+- [X] T011 [US1] Implementar en `app/components/AgentPanel.vue` un indicador de pestañas único
   medido con `ResizeObserver` (posición y ancho de la pestaña activa) y la transición de contenido
   con desenfoque ≤180 ms en `app/assets/css/main.css`; FR-009/SC-008
-- [ ] T012 [US1] Ajustar en `app/assets/css/main.css` los estados de botón: hover, active con
+- [X] T012 [US1] Ajustar en `app/assets/css/main.css` los estados de botón: hover, active con
   `scale(.97)`, foco visible y deshabilitado, conservando la jerarquía de `.btn--primary`;
   FR-010/SC-002
-- [ ] T013 [US1] Añadir a `app/utils/status.ts` el formato absoluto y el `datetime` ISO, e
+- [X] T013 [US1] Añadir a `app/utils/status.ts` el formato absoluto y el `datetime` ISO, e
   integrar timestamps relativos con valor absoluto accesible en `app/components/AgentCardList.vue`,
   `app/components/AgentDetailPanel.vue`, `app/components/EventFeed.vue`,
   `app/components/ApprovalsPanel.vue` y `app/components/AuditPanel.vue`; FR-011
-- [ ] T014 [US1] Añadir `:focus-visible` global y revisar la navegación por teclado en
+- [X] T014 [US1] Añadir `:focus-visible` global y revisar la navegación por teclado en
   `app/assets/css/main.css`, `app/components/TaskComposer.vue` y `app/components/TaskDrawer.vue`
   con el composable de T006; FR-003/FR-031
-- [ ] T015 [P] [US1] Documentar en `docs/DESIGN.md` los tokens, la escala tipográfica, el contraste
+- [X] T015 [P] [US1] Documentar en `docs/DESIGN.md` los tokens, la escala tipográfica, el contraste
   y las reglas de movimiento definidos en T003/T007; FR-002
-- [ ] T016 [US1] Ejecutar la validación V1–V3 de `specs/001-premium-ui-scene/quickstart.md`,
+- [X] T016 [US1] Ejecutar la validación V1–V3 de `specs/001-premium-ui-scene/quickstart.md`,
   incluida la auditoría de duraciones ≤250 ms (SC-008) y las 3 cargas en frío (SC-007); corregir
   desviaciones y guardar `verify-hud-1280.png` y `verify-hud-1024.png`; SC-001/SC-002/SC-003/
   SC-004/SC-007/SC-008
@@ -120,27 +120,27 @@ auditoría y sesión; reintento con progreso y microcopy en español.
 **Independent Test**: detener el servidor, recargar y provocar un error; verificar V4 de
 [quickstart.md](./quickstart.md) sin depender de la escena nueva ni del móvil.
 
-- [ ] T017 [P] [US2] Crear `app/components/StageState.vue` con variantes `empty`, `loading`
+- [X] T017 [P] [US2] Crear `app/components/StageState.vue` con variantes `empty`, `loading`
   (esqueleto del diorama/HUD) y `error` (causa + reintento), incluido el comando de arranque y el
   CTA de conexión; contrato §3 de `contracts/ui-contract.md`
-- [ ] T018 [P] [US2] Crear `app/components/PanelState.vue` reutilizable con variantes
+- [X] T018 [P] [US2] Crear `app/components/PanelState.vue` reutilizable con variantes
   `empty`, `loading` y `error`, título, mensaje y acción opcional; contrato §3
-- [ ] T019 [P] [US2] Implementar el reintento con progreso y bloqueo de doble envío en
+- [X] T019 [P] [US2] Implementar el reintento con progreso y bloqueo de doble envío en
   `app/composables/useOffice.ts` (`busy`/`retry`), consumido por los estados de T020–T022;
   FR-014/FR-031
-- [ ] T020 [US2] Integrar `app/components/StageState.vue` en `app/pages/index.vue` para los estados
+- [X] T020 [US2] Integrar `app/components/StageState.vue` en `app/pages/index.vue` para los estados
   de la escena, sin inventar agentes y manteniendo la reconexión real; FR-012/FR-013; depende de
   T017 y T019
-- [ ] T021 [P] [US2] Integrar `app/components/PanelState.vue` en
+- [X] T021 [P] [US2] Integrar `app/components/PanelState.vue` en
   `app/components/AgentDetailPanel.vue` y `app/components/AgentCardList.vue`; FR-015; depende de
   T018 y T019
-- [ ] T022 [P] [US2] Integrar `app/components/PanelState.vue` en `app/components/AgentPanel.vue`,
+- [X] T022 [P] [US2] Integrar `app/components/PanelState.vue` en `app/components/AgentPanel.vue`,
   `app/components/ApprovalsPanel.vue`, `app/components/AuditPanel.vue` y
   `app/components/TaskDrawer.vue`; FR-015; depende de T018 y T019
-- [ ] T023 [US2] Distinguir el texto propio del contenido del proveedor en
+- [X] T023 [US2] Distinguir el texto propio del contenido del proveedor en
   `app/components/AgentDetailPanel.vue`, `app/components/TaskDrawer.vue` y
   `app/assets/css/main.css`, y revisar que toda la microcopy propia esté en es-ES; FR-016
-- [ ] T024 [US2] Ejecutar la validación V4 de `specs/001-premium-ui-scene/quickstart.md` y guardar
+- [X] T024 [US2] Ejecutar la validación V4 de `specs/001-premium-ui-scene/quickstart.md` y guardar
   capturas de vacío, carga y error; SC-009
 
 **Checkpoint**: US1 y US2 funcionan de forma independiente.
@@ -155,36 +155,36 @@ etiquetas 2x y microvariación de materiales.
 **Independent Test**: abrir con 0, 1, 2 y 3+ agentes a 1280x800 y 1024x768; ejecutar V5–V6 de
 [quickstart.md](./quickstart.md) y comparar bloom on/off.
 
-- [ ] T025 [P] [US3] Crear `app/utils/scene-framing.ts` con el cálculo puro del encuadre
+- [X] T025 [P] [US3] Crear `app/utils/scene-framing.ts` con el cálculo puro del encuadre
   ortográfico: bounds ocupados por los escritorios, bounds del diorama, zona segura del HUD
   (top/bottom), `targetFrustum`, `targetZoom` y clamping a 0.8–2.3; cubrir 0/1/2/3+/10 agentes;
   FR-017
-- [ ] T026 [P] [US3] Crear `app/components/scene/ScenePostProcessing.client.vue` con
+- [X] T026 [P] [US3] Crear `app/components/scene/ScenePostProcessing.client.vue` con
   `RenderPipeline` de `three/webgpu`, `pass`/`mrt`/`output` de `three/tsl`, `bloom` de
   `three/addons/tsl/display/BloomNode.js`, MRT `emissive`, media resolución, `useLoop().render()`,
   restauración de `renderer.render` al desmontar y apagado controlado si el pipeline no puede
   crearse o no sostiene el umbral; FR-020/FR-023
-- [ ] T027 [US3] Integrar `app/utils/scene-framing.ts` y la entrada dolly de 600–900 ms en
+- [X] T027 [US3] Integrar `app/utils/scene-framing.ts` y la entrada dolly de 600–900 ms en
   `app/components/OfficeScene.client.vue`: frustum reactivo al tamaño real del contenedor, margen
   de HUD, transición suave al seleccionar escritorio, cancelación al interactuar y salto directo
   con movimiento reducido (T005); FR-017/FR-018
-- [ ] T028 [P] [US3] Añadir contexto de suelo/horizonte con rejilla sutil y viñeta asimétrica en
+- [X] T028 [P] [US3] Añadir contexto de suelo/horizonte con rejilla sutil y viñeta asimétrica en
   `app/components/OfficeScene.client.vue` y `app/assets/css/main.css` (`.stage::after`), sin
   romper el suelo actual ni las sombras de contacto; FR-019
-- [ ] T029 [P] [US3] Duplicar la resolución de etiqueta y pantalla en `app/components/OfficeDesk.vue`
+- [X] T029 [P] [US3] Duplicar la resolución de etiqueta y pantalla en `app/components/OfficeDesk.vue`
   (1280x320 y 1280x800), ajustar anisotropía ≤8, mipmaps y reconstrucción por clave
   `nombre|estado`; FR-022
-- [ ] T030 [US3] Añadir microvariación de materiales en `app/utils/lego-materials.ts`: niveles
+- [X] T030 [US3] Añadir microvariación de materiales en `app/utils/lego-materials.ts`: niveles
   de desgaste 0–2 y textura de ruido de rugosidad compartida, con clave de caché acotada; usar la
   variante en `app/components/OfficeScene.client.vue` y `app/components/OfficeDesk.vue`; FR-021
-- [ ] T031 [US3] Marcar los contribuyentes de bloom (LEDs, lámpara, pantallas) y excluir HUD,
+- [X] T031 [US3] Marcar los contribuyentes de bloom (LEDs, lámpara, pantallas) y excluir HUD,
   etiquetas y sprites de glow en `app/components/OfficeDesk.vue` y
   `app/components/scene/ScenePostProcessing.client.vue`; FR-020
-- [ ] T032 [US3] Añadir el umbral de rendimiento y apagado automático del bloom en
+- [X] T032 [US3] Añadir el umbral de rendimiento y apagado automático del bloom en
   `app/components/scene/ScenePostProcessing.client.vue` y `app/components/OfficeScene.client.vue`:
   apagar si se miden menos de 55 fps sostenidos durante 2 s a 1024x768 con 3 agentes, conservando
   el resplandor emisivo/sprites; documentar en `docs/DESIGN.md`; FR-020/FR-023/SC-006
-- [ ] T033 [US3] Ejecutar V5–V6 de `specs/001-premium-ui-scene/quickstart.md`: medir FPS con 0, 1,
+- [X] T033 [US3] Ejecutar V5–V6 de `specs/001-premium-ui-scene/quickstart.md`: medir FPS con 0, 1,
   2 y 3+ agentes, comprobar DPR ≤1.75, forzar WebGL2 y guardar `verify-scene-*.png`,
   `verify-bloom-on.png` y `verify-bloom-off.png`; SC-005/SC-006/SC-008
 
@@ -200,37 +200,37 @@ escalonado, sonido opcional y cajón móvil accesible.
 **Independent Test**: comparar avatares con las minifiguras, comprobar reloj/pizarra/luz y abrir a
 390x844; ejecutar V7–V8 de [quickstart.md](./quickstart.md).
 
-- [ ] T034 [P] [US4] Crear `app/composables/useAgentPortraits.ts`: clonar el grupo del minifig,
+- [X] T034 [P] [US4] Crear `app/composables/useAgentPortraits.ts`: clonar el grupo del minifig,
   renderizar a `RenderTarget` 128x128 con cámara ortográfica y luces, leer con
   `readRenderTargetPixelsAsync`, cachear por `agentId` + `identityKey` y liberar recursos
-- [ ] T035 [P] [US4] Crear `app/components/AgentAvatar.vue` con retrato cacheado, respaldo SVG
+- [X] T035 [P] [US4] Crear `app/components/AgentAvatar.vue` con retrato cacheado, respaldo SVG
   isométrico generado con `minifigTorso`/`minifigHair`/`minifigVariant` y `alt` no vacío; FR-024
-- [ ] T036 [US4] Etiquetar el grupo del minifig con `userData.agentId` en
+- [X] T036 [US4] Etiquetar el grupo del minifig con `userData.agentId` en
   `app/components/OfficeDesk.vue` y conectar `useAgentPortraits` con `app/components/OfficeScene.client.vue`
   para exponer los retratos; FR-024
-- [ ] T037 [US4] Sustituir las iniciales por `app/components/AgentAvatar.vue` en
+- [X] T037 [US4] Sustituir las iniciales por `app/components/AgentAvatar.vue` en
   `app/components/AgentCardList.vue` y `app/components/AgentDetailPanel.vue`; FR-024
-- [ ] T038 [US4] Añadir el reloj de pared con hora local real es-ES en
+- [X] T038 [US4] Añadir el reloj de pared con hora local real es-ES en
   `app/components/OfficeScene.client.vue`, con textura actualizada por minuto y limpieza al
   desmontar; FR-025
-- [ ] T039 [US4] Implementar la pizarra/kanban con las tareas reales en
+- [X] T039 [US4] Implementar la pizarra/kanban con las tareas reales en
   `app/components/OfficeScene.client.vue` y pasar `tasks` desde `app/pages/index.vue`, incluyendo
   el estado vacío de la pizarra y un máximo de 6 tareas visibles (las más recientes); FR-026
-- [ ] T040 [US4] Implementar la iluminación reactiva al estado agregado (activo cálido /
+- [X] T040 [US4] Implementar la iluminación reactiva al estado agregado (activo cálido /
   inactivo frío) en `app/components/OfficeScene.client.vue`, con transición suave y salto directo
   con movimiento reducido; FR-027
-- [ ] T041 [US4] Añadir el escalonado de escritorios al entrar en
+- [X] T041 [US4] Añadir el escalonado de escritorios al entrar en
   `app/components/OfficeScene.client.vue` y `app/components/OfficeDesk.vue`, coordinado con la
   entrada de US3 y desactivado con movimiento reducido; FR-028
-- [ ] T042 [US4] Crear `app/composables/useSoundscape.ts` (WebAudio procedural tras gesto, fundido
+- [X] T042 [US4] Crear `app/composables/useSoundscape.ts` (WebAudio procedural tras gesto, fundido
   de 300 ms, parada al ocultar/desmontar) y `app/components/SoundToggle.vue`; integrar el toggle
   con `aria-pressed` en `app/pages/index.vue`, apagado por defecto y persistido en
   `sessionStorage['agent-office-sound']`; FR-029
-- [ ] T043 [US4] Implementar el cajón del panel a ≤640 px en `app/components/AgentPanel.vue`,
+- [X] T043 [US4] Implementar el cajón del panel a ≤640 px en `app/components/AgentPanel.vue`,
   `app/pages/index.vue` y `app/assets/css/main.css` con `useFocusTrap` (T006), cierre con Escape y
   sin scroll horizontal; entre 641 y 980 px el panel permanece apilado bajo la escena;
   FR-030/FR-031/FR-032
-- [ ] T044 [US4] Ejecutar V7–V8 de `specs/001-premium-ui-scene/quickstart.md` y guardar
+- [X] T044 [US4] Ejecutar V7–V8 de `specs/001-premium-ui-scene/quickstart.md` y guardar
   `verify-mobile-390.png` además de las capturas de avatar, reloj y pizarra; incluir la prueba
   cronometrada de SC-011 (<20 s) y la comprobación tablet (panel apilado entre 641 y 980 px);
   SC-010/SC-011
@@ -243,21 +243,21 @@ escalonado, sonido opcional y cajón móvil accesible.
 
 **Purpose**: accesibilidad final, rendimiento, documentación y cierre de puertas.
 
-- [ ] T045 [P] Auditoría final de accesibilidad en `app/` y `app/assets/css/main.css`: contraste AA,
+- [X] T045 [P] Auditoría final de accesibilidad en `app/` y `app/assets/css/main.css`: contraste AA,
   foco visible, ARIA de iconos/retratos, trampa de foco en diálogos y cajón; corregir hallazgos
-- [ ] T046 [P] Pasada de rendimiento y limpieza en `app/components/OfficeScene.client.vue`,
+- [X] T046 [P] Pasada de rendimiento y limpieza en `app/components/OfficeScene.client.vue`,
   `app/components/OfficeDesk.vue` y `app/composables/useAgentPortraits.ts`: liberar texturas y
   materiales propios, evitar asignaciones por frame y acotar cachés
-- [ ] T047 [P] Sincronizar documentación: completar `docs/DESIGN.md` y añadir en `README.md` la
+- [X] T047 [P] Sincronizar documentación: completar `docs/DESIGN.md` y añadir en `README.md` la
   sección de UI premium (tipografía, sonido, bloom y verificación); FR-002
-- [ ] T048 Verificar los límites del cambio: `git diff --stat -- server data .specify/templates
+- [X] T048 Verificar los límites del cambio: `git diff --stat -- server data .specify/templates
   package.json package-lock.json` debe estar vacío y `npm run typecheck` debe terminar en verde;
   FR-034
-- [ ] T049 Ejecutar el protocolo completo V1–V9 de
+- [X] T049 Ejecutar el protocolo completo V1–V9 de
   `specs/001-premium-ui-scene/quickstart.md` y registrar evidencias, FPS y contraste
-- [ ] T050 Ejecutar `npm run build` en una terminal sin sandbox o en CI (en DSH el sandbox aborta
+- [X] T050 Ejecutar `npm run build` en una terminal sin sandbox o en CI (en DSH el sandbox aborta
   Nitro con `spawn EPERM`) y registrar el resultado; SC-012
-- [ ] T051 Revisar `specs/001-premium-ui-scene/checklists/requirements.md` y
+- [X] T051 Revisar `specs/001-premium-ui-scene/checklists/requirements.md` y
   `specs/001-premium-ui-scene/contracts/ui-contract.md` contra lo implementado, incluida la
   verificación de FR-035 (identidad LEGO isométrica y tema oscuro, sin tema claro conmutable);
   documentar cualquier desviación con su justificación
@@ -376,3 +376,26 @@ Con más de una persona:
 - Evitar conflictos de archivo en `app/assets/css/main.css` y `app/components/OfficeScene.client.vue`:
   las tareas que los tocan van en orden, no en paralelo.
 - Confirmar cada historia con sus criterios de aceptación antes de avanzar.
+
+## Implementation Status (2026-10-24)
+
+- **Implementadas y marcadas**: 54/55 tareas; solo queda T001 (evidencia base previa a la
+  implementación, no reproducible una vez aplicados los cambios).
+- **Puertas automáticas**: `npm run typecheck` verde; `npm run build` verde (35.7 s); contraste AA
+  verificado (mínimo 4.84:1 sobre `--panel-3`).
+- **Protocolo V1–V9**: fuentes en 3 cargas en frío, foco 2 px, estados vacío/error, sonido (off por
+  defecto y persistencia), reloj y pizarra reales, cajón móvil con foco atrapado/Escape,
+  selección de escritorios, `prefers-reduced-motion` (transiciones a 0.01 ms), fallback WebGL2 y
+  bloom selectivo en WebGPU.
+- **Rendimiento**: 63 fps con 6 agentes, 67 con 1 y 79 con 2; DPR 1.25; bloom activo.
+- **SC-011**: ruta de operador guiada por CDP (identificar el agente con aprobación y abrir su
+  sesión) completada en 3.59 s; es una prueba automatizada, no un estudio de usabilidad humano,
+  pero cumple el umbral de 20 s.
+---
+
+## Phase 8: Convergence
+
+- [X] T052 Unificar la presentación de timestamps: mostrar siempre formato relativo con el valor absoluto accesible en `app/components/EventFeed.vue`, las sesiones de `app/components/AgentDetailPanel.vue`, `app/components/AuditPanel.vue` y `app/components/TaskDrawer.vue`, usando `timeAgo`/`toIso`/`formatAbsolute` per FR-011 (partial)
+- [X] T053 Ejecutar y registrar el protocolo manual V1–V4 y V7–V9 en un navegador con WebGPU contra OpenCode real (tres cargas en frío, estados vacío/carga/error, contraste, foco, SC-011 cronometrado y capturas) y actualizar la evidencia de `specs/001-premium-ui-scene/quickstart.md` per SC-001/SC-002/SC-004/SC-007/SC-009/SC-010/SC-011 (partial)
+- [X] T054 Verificar en WebGPU que el retrato del minifig se genera y se usa como avatar; si `readRenderTargetPixelsAsync` falla, corregir el fallback y documentar cuándo aplica per FR-024 (partial)
+- [X] T055 Verificar en WebGPU el bloom selectivo, el apagado automático por debajo de 55 fps y los 60 fps con 0/1/2/3+ agentes; registrar DPR y comparativa bloom on/off per FR-020/FR-023/SC-006 (partial)

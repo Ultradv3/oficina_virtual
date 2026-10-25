@@ -59,6 +59,19 @@ interface ApprovalRow {
   created_at: number
 }
 
+interface SubtaskRow {
+  id: string
+  task_id: string
+  agent_id: string
+  session_id: string
+  title: string
+  status: string
+  error: string | null
+  created_at: number
+  updated_at: number
+  finished_at: number | null
+}
+
 interface ConnectionRow {
   id: string
   adapter_type: string
@@ -328,7 +341,7 @@ function recomputeAgentStatus(agentId: string): AgentRow | undefined {
   const connected = state?.status === 'connected' && adapter?.isConnected()
 
   let status: AgentStatus
-  let reason: string | null = null
+  let reason: string | null
 
   if (!connected) {
     status = 'disconnected'
@@ -339,9 +352,13 @@ function recomputeAgentStatus(agentId: string): AgentRow | undefined {
       .get(agentId) as { count: number }
     const running = db
       .prepare(
-        "SELECT COUNT(*) AS count FROM tasks WHERE agent_id = ? AND status IN ('queued','running')",
+        `SELECT (
+           (SELECT COUNT(*) FROM tasks WHERE agent_id = ? AND status IN ('queued','running'))
+           +
+           (SELECT COUNT(*) FROM subtasks WHERE agent_id = ? AND status IN ('queued','running'))
+         ) AS count`,
       )
-      .get(agentId) as { count: number }
+      .get(agentId, agentId) as { count: number }
 
     if (pending.count > 0) {
       status = 'waiting_approval'
@@ -353,13 +370,18 @@ function recomputeAgentStatus(agentId: string): AgentRow | undefined {
       const lastTask = db
         .prepare('SELECT * FROM tasks WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1')
         .get(agentId) as TaskRow | undefined
-      if (
-        lastTask &&
-        lastTask.status === 'failed' &&
-        now() - lastTask.updated_at < 15 * 60 * 1000
-      ) {
+      const lastSubtask = db
+        .prepare('SELECT * FROM subtasks WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1')
+        .get(agentId) as SubtaskRow | undefined
+      const failed =
+        lastTask?.status === 'failed' && (!lastSubtask || lastTask.updated_at >= lastSubtask.updated_at)
+          ? lastTask
+          : lastSubtask?.status === 'failed'
+            ? lastSubtask
+            : undefined
+      if (failed && now() - failed.updated_at < 15 * 60 * 1000) {
         status = 'error'
-        reason = clip(lastTask.error ?? 'La última tarea falló', 280)
+        reason = clip(failed.error ?? 'La última ejecución falló', 280)
       } else {
         status = 'available'
         reason = null
@@ -470,11 +492,54 @@ function findTaskBySession(sessionId: string): TaskRow | undefined {
     | undefined
 }
 
+function findTaskById(taskId: string): TaskRow | undefined {
+  return getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as TaskRow | undefined
+}
+
+function findSubtaskBySession(sessionId: string): SubtaskRow | undefined {
+  return getDb().prepare('SELECT * FROM subtasks WHERE session_id = ?').get(sessionId) as
+    | SubtaskRow
+    | undefined
+}
+
+function findAgentById(agentId: string): AgentRow | undefined {
+  return getDb().prepare('SELECT * FROM agents WHERE id = ?').get(agentId) as AgentRow | undefined
+}
+
+function findAgentByExternal(connectionId: string, externalId: string): AgentRow | undefined {
+  return getDb()
+    .prepare('SELECT * FROM agents WHERE connection_id = ? AND external_id = ?')
+    .get(connectionId, externalId) as AgentRow | undefined
+}
+
+function expireSessionApprovals(sessionId: string, reason: string): void {
+  getDb()
+    .prepare(
+      "UPDATE approvals SET status = 'expired', error = ?, resolved_at = ? WHERE session_id = ? AND status = 'pending'",
+    )
+    .run(reason, now(), sessionId)
+}
+
+function finishSubtasks(taskId: string, status: 'completed' | 'failed' | 'cancelled', reason?: string): void {
+  const timestamp = now()
+  getDb()
+    .prepare(
+      `UPDATE subtasks SET status = ?, error = ?, finished_at = COALESCE(finished_at, ?), updated_at = ?
+       WHERE task_id = ? AND status IN ('queued','running')`,
+    )
+    .run(status, reason ?? null, timestamp, timestamp, taskId)
+}
+
 function agentForTask(task: TaskRow): AgentRow | undefined {
   return getDb().prepare('SELECT * FROM agents WHERE id = ?').get(task.agent_id) as AgentRow | undefined
 }
 
-function handleApprovalRequested(evt: NormalizedEvent, task: TaskRow): boolean {
+function handleApprovalRequested(
+  evt: NormalizedEvent,
+  task: TaskRow,
+  sessionId: string,
+  agentId: string,
+): boolean {
   if (['completed', 'failed', 'cancelled'].includes(task.status)) return false
   const db = getDb()
   const payload = (evt.payload ?? {}) as Record<string, unknown>
@@ -486,14 +551,14 @@ function handleApprovalRequested(evt: NormalizedEvent, task: TaskRow): boolean {
 
   const existing = db
     .prepare('SELECT * FROM approvals WHERE session_id = ? AND external_id = ?')
-    .get(task.session_id, externalId) as ApprovalRow | undefined
+    .get(sessionId, externalId) as ApprovalRow | undefined
   if (existing) return false
 
   const approval: ApprovalRow = {
     id: randomUUID(),
-    agent_id: task.agent_id,
+    agent_id: agentId,
     task_id: task.id,
-    session_id: task.session_id as string,
+    session_id: sessionId,
     external_id: externalId,
     title: permission,
     detail,
@@ -510,9 +575,9 @@ function handleApprovalRequested(evt: NormalizedEvent, task: TaskRow): boolean {
 
   recordEvent({
     connectionId: task.connection_id,
-    agentId: task.agent_id,
+    agentId,
     taskId: task.id,
-    sessionId: task.session_id,
+    sessionId,
     type: 'approval.requested',
     level: 'warn',
     message: `Aprobación pendiente: ${permission}${detail ? ` · ${detail}` : ''}`,
@@ -521,9 +586,69 @@ function handleApprovalRequested(evt: NormalizedEvent, task: TaskRow): boolean {
   return true
 }
 
+function handleSubtaskCreated(connectionId: string, evt: NormalizedEvent): void {
+  const db = getDb()
+  const sessionId = evt.sessionId
+  if (!sessionId) return
+  const payload = (evt.payload ?? {}) as Record<string, unknown>
+  const parentSessionId = String(payload.parentSessionId ?? '')
+  if (!parentSessionId) return
+  const parentTask = findTaskBySession(parentSessionId)
+  if (!parentTask || ['completed', 'failed', 'cancelled'].includes(parentTask.status)) return
+
+  const externalAgent =
+    evt.agentExternalId ?? (typeof payload.agent === 'string' ? payload.agent : undefined)
+  const worker =
+    (externalAgent ? findAgentByExternal(connectionId, externalAgent) : undefined) ??
+    findAgentById(parentTask.agent_id)
+  if (!worker) return
+
+  const existing = findSubtaskBySession(sessionId)
+  if (existing) return
+
+  const title = clip(evt.message || 'Sesión delegada', 180)
+  const timestamp = now()
+  const subtask: SubtaskRow = {
+    id: randomUUID(),
+    task_id: parentTask.id,
+    agent_id: worker.id,
+    session_id: sessionId,
+    title,
+    status: 'running',
+    error: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+    finished_at: null,
+  }
+  db.prepare(
+    `INSERT INTO subtasks (id, task_id, agent_id, session_id, title, status, error, created_at, updated_at, finished_at)
+     VALUES (@id, @task_id, @agent_id, @session_id, @title, @status, @error, @created_at, @updated_at, @finished_at)`,
+  ).run(subtask)
+
+  recordEvent({
+    connectionId,
+    agentId: worker.id,
+    taskId: parentTask.id,
+    sessionId,
+    type: 'subtask.created',
+    level: 'info',
+    message: `Delegado a ${worker.name}: ${title}`,
+    payload: { agent: worker.external_id, parentSessionId },
+  })
+  recomputeAgentStatus(worker.id)
+  broadcast({ kind: 'refresh', reason: 'subtask-created', agentId: worker.id, taskId: parentTask.id })
+}
+
 function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
   const db = getDb()
-  const task = evt.sessionId ? findTaskBySession(evt.sessionId) : undefined
+  if (evt.type === 'subtask.created') {
+    handleSubtaskCreated(connectionId, evt)
+    return
+  }
+  const mainTask = evt.sessionId ? findTaskBySession(evt.sessionId) : undefined
+  const subtask =
+    !mainTask && evt.sessionId ? findSubtaskBySession(evt.sessionId) : undefined
+  const task = mainTask ?? (subtask ? findTaskById(subtask.task_id) : undefined)
   if (evt.sessionId && !task) return
   if (!task) {
     recordEvent({
@@ -536,19 +661,40 @@ function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
     return
   }
 
-  const agent = agentForTask(task)
+  const isChild = Boolean(subtask)
+  const agentId = subtask?.agent_id ?? task.agent_id
+  const agent = findAgentById(agentId) ?? agentForTask(task)
+  const sessionId = evt.sessionId ?? task.session_id ?? null
   const timestamp = now()
   let cancelledAbort = false
 
   switch (evt.type) {
     case 'task.status': {
       const payload = (evt.payload ?? {}) as Record<string, unknown>
-      if (!task.cancel_requested_at && task.status !== 'completed' && task.status !== 'failed') {
+      if (isChild && subtask) {
+        if (!['completed', 'failed', 'cancelled'].includes(subtask.status)) {
+          if (payload.idle === true) {
+            db.prepare(
+              "UPDATE subtasks SET status = 'completed', finished_at = ?, updated_at = ? WHERE id = ?",
+            ).run(timestamp, timestamp, subtask.id)
+            expireSessionApprovals(subtask.session_id, 'La sesión delegada terminó')
+          } else {
+            db.prepare(
+              "UPDATE subtasks SET status = 'running', updated_at = ? WHERE id = ?",
+            ).run(timestamp, subtask.id)
+          }
+        }
+      } else if (
+        !task.cancel_requested_at &&
+        task.status !== 'completed' &&
+        task.status !== 'failed'
+      ) {
         if (payload.idle === true) {
           db.prepare(
             "UPDATE tasks SET status = 'completed', finished_at = ?, updated_at = ? WHERE id = ?",
           ).run(timestamp, timestamp, task.id)
           expireApprovals(task.id, 'La sesión terminó sin resolver la aprobación')
+          finishSubtasks(task.id, 'completed')
         } else if (task.status === 'queued') {
           db.prepare("UPDATE tasks SET status = 'running', updated_at = ? WHERE id = ?").run(
             timestamp,
@@ -560,22 +706,42 @@ function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
     }
     case 'task.error': {
       cancelledAbort = task.cancel_requested_at !== null && /abort/i.test(evt.message)
-      if (cancelledAbort) {
+      if (isChild && subtask) {
+        db.prepare(
+          "UPDATE subtasks SET status = ?, error = ?, finished_at = ?, updated_at = ? WHERE id = ?",
+        ).run(
+          cancelledAbort ? 'cancelled' : 'failed',
+          cancelledAbort ? null : evt.message,
+          timestamp,
+          timestamp,
+          subtask.id,
+        )
+        expireSessionApprovals(subtask.session_id, cancelledAbort ? 'La ejecución fue cancelada' : 'La ejecución falló')
+        if (agent) {
+          audit('opencode', 'subtask.failed', 'subtask', subtask.id, {
+            agentId: agent.id,
+            taskId: task.id,
+            message: evt.message,
+          })
+        }
+      } else if (cancelledAbort) {
         db.prepare(
           "UPDATE tasks SET status = 'cancelled', error = NULL, finished_at = COALESCE(finished_at, ?), updated_at = ? WHERE id = ?",
         ).run(timestamp, timestamp, task.id)
         expireApprovals(task.id, 'La ejecución fue cancelada')
+        finishSubtasks(task.id, 'cancelled', 'La tarea padre fue cancelada')
       } else {
         db.prepare(
           "UPDATE tasks SET status = 'failed', error = ?, finished_at = ?, updated_at = ? WHERE id = ?",
         ).run(evt.message, timestamp, timestamp, task.id)
         expireApprovals(task.id, 'La ejecución falló')
+        finishSubtasks(task.id, 'failed', 'La tarea padre falló')
         if (agent) recordAuditTaskError(agent.id, task.id, evt.message)
       }
       break
     }
     case 'approval.requested': {
-      handleApprovalRequested(evt, task)
+      if (sessionId) handleApprovalRequested(evt, task, sessionId, agentId)
       break
     }
     case 'approval.replied': {
@@ -584,16 +750,16 @@ function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
       const reply = String(payload.reply ?? '')
       const approval = db
         .prepare('SELECT * FROM approvals WHERE session_id = ? AND external_id = ?')
-        .get(task.session_id, externalId) as ApprovalRow | undefined
+        .get(sessionId, externalId) as ApprovalRow | undefined
       if (approval && approval.status === 'pending') {
         db.prepare(
           'UPDATE approvals SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?',
         ).run(reply === 'reject' ? 'rejected' : 'approved', timestamp, 'opencode', approval.id)
         recordEvent({
           connectionId,
-          agentId: task.agent_id,
+          agentId: approval.agent_id,
           taskId: task.id,
-          sessionId: task.session_id,
+          sessionId,
           type: 'approval.resolved',
           level: reply === 'reject' ? 'warn' : 'success',
           message: `Aprobación ${reply === 'reject' ? 'rechazada' : 'aprobada'} desde OpenCode`,
@@ -603,9 +769,16 @@ function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
       break
     }
     case 'task.cancelled': {
-      db.prepare(
-        "UPDATE tasks SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE id = ?",
-      ).run(timestamp, timestamp, task.id)
+      if (isChild && subtask) {
+        db.prepare(
+          "UPDATE subtasks SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE id = ?",
+        ).run(timestamp, timestamp, subtask.id)
+      } else {
+        db.prepare(
+          "UPDATE tasks SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE id = ?",
+        ).run(timestamp, timestamp, task.id)
+        finishSubtasks(task.id, 'cancelled', 'La tarea padre fue cancelada')
+      }
       break
     }
     default:
@@ -615,9 +788,9 @@ function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
   if (evt.type !== 'approval.requested' && evt.type !== 'approval.replied') {
     recordEvent({
       connectionId,
-      agentId: task.agent_id,
+      agentId,
       taskId: task.id,
-      sessionId: task.session_id,
+      sessionId,
       type: cancelledAbort ? 'task.cancelled' : evt.type,
       level: cancelledAbort ? 'warn' : evt.level,
       message: cancelledAbort ? 'Ejecución abortada por cancelación' : evt.message,
@@ -625,8 +798,9 @@ function handleAdapterEvent(connectionId: string, evt: NormalizedEvent): void {
     })
   }
 
-  recomputeAgentStatus(task.agent_id)
-  broadcast({ kind: 'refresh', reason: 'task-event', agentId: task.agent_id, taskId: task.id })
+  recomputeAgentStatus(agentId)
+  if (agentId !== task.agent_id) recomputeAgentStatus(task.agent_id)
+  broadcast({ kind: 'refresh', reason: 'task-event', agentId, taskId: task.id })
 }
 
 function recordAuditTaskError(agentId: string, taskId: string, message: string): void {
@@ -716,12 +890,72 @@ export function getState() {
         "SELECT * FROM tasks WHERE agent_id = ? AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",
       )
       .get(agent.id) as TaskRow | undefined
+    const activeSubtask = active
+      ? undefined
+      : (db
+          .prepare(
+            `SELECT s.*, t.title AS parent_title, t.session_id AS parent_session_id
+             FROM subtasks s JOIN tasks t ON t.id = s.task_id
+             WHERE s.agent_id = ? AND s.status IN ('queued','running')
+             ORDER BY s.created_at DESC LIMIT 1`,
+          )
+          .get(agent.id) as
+          | (SubtaskRow & { parent_title: string; parent_session_id: string | null })
+          | undefined)
     const latest = active ?? (db
       .prepare('SELECT * FROM tasks WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1')
       .get(agent.id) as TaskRow | undefined)
+    const lastSubtask =
+      active || latest
+        ? undefined
+        : (db
+            .prepare(
+              `SELECT s.*, t.title AS parent_title, t.session_id AS parent_session_id
+               FROM subtasks s JOIN tasks t ON t.id = s.task_id
+               WHERE s.agent_id = ? ORDER BY s.created_at DESC LIMIT 1`,
+            )
+            .get(agent.id) as
+            | (SubtaskRow & { parent_title: string; parent_session_id: string | null })
+            | undefined)
     const pending = db
       .prepare("SELECT COUNT(*) AS count FROM approvals WHERE agent_id = ? AND status = 'pending'")
       .get(agent.id) as { count: number }
+
+    const currentTask = active
+      ? {
+          id: active.id,
+          title: active.title,
+          status: active.status,
+          createdAt: active.created_at,
+          sessionId: active.session_id,
+        }
+      : activeSubtask
+        ? {
+            id: activeSubtask.task_id,
+            title: `↳ ${activeSubtask.parent_title}`,
+            status: 'running',
+            createdAt: activeSubtask.created_at,
+            sessionId: activeSubtask.parent_session_id,
+            delegated: true,
+          }
+        : latest
+          ? {
+              id: latest.id,
+              title: latest.title,
+              status: latest.status,
+              createdAt: latest.created_at,
+              sessionId: latest.session_id,
+            }
+          : lastSubtask
+            ? {
+                id: lastSubtask.task_id,
+                title: `↳ ${lastSubtask.parent_title}`,
+                status: lastSubtask.status,
+                createdAt: lastSubtask.created_at,
+                sessionId: lastSubtask.parent_session_id,
+                delegated: true,
+              }
+            : null
 
     return {
       id: agent.id,
@@ -736,15 +970,7 @@ export function getState() {
       capabilities: parseJson<Capability[]>(agent.capabilities_json, []),
       metadata: parseJson<Record<string, unknown>>(agent.metadata_json, {}),
       lastSeenAt: agent.last_seen_at,
-      currentTask: latest
-        ? {
-            id: latest.id,
-            title: latest.title,
-            status: latest.status,
-            createdAt: latest.created_at,
-            sessionId: latest.session_id,
-          }
-        : null,
+      currentTask,
       pendingApprovals: pending.count,
       updatedAt: agent.updated_at,
     }
@@ -817,6 +1043,15 @@ export function getAgentDetail(agentId: string) {
   const approvals = db
     .prepare('SELECT * FROM approvals WHERE agent_id = ? ORDER BY created_at DESC LIMIT 30')
     .all(agentId) as ApprovalRow[]
+  const delegations = db
+    .prepare(
+      `SELECT s.*, t.title AS parent_title, a.name AS agent_name
+       FROM subtasks s
+       JOIN tasks t ON t.id = s.task_id
+       LEFT JOIN agents a ON a.id = s.agent_id
+       WHERE s.agent_id = ? ORDER BY s.created_at DESC LIMIT 20`,
+    )
+    .all(agentId) as Array<SubtaskRow & { parent_title: string; agent_name: string | null }>
 
   return {
     agent: {
@@ -852,6 +1087,10 @@ export function getAgentDetail(agentId: string) {
       resolvedBy: approval.resolved_by,
       error: approval.error,
     })),
+    delegations: delegations.map((subtask) => ({
+      ...publicSubtask(subtask),
+      parentTitle: subtask.parent_title,
+    })),
   }
 }
 
@@ -868,6 +1107,22 @@ function publicTask(task: TaskRow) {
     updatedAt: task.updated_at,
     finishedAt: task.finished_at,
     cancelRequestedAt: task.cancel_requested_at,
+  }
+}
+
+function publicSubtask(subtask: SubtaskRow & { agent_name?: string | null }) {
+  return {
+    id: subtask.id,
+    taskId: subtask.task_id,
+    agentId: subtask.agent_id,
+    agentName: subtask.agent_name ?? null,
+    sessionId: subtask.session_id,
+    title: subtask.title,
+    status: subtask.status,
+    error: subtask.error,
+    createdAt: subtask.created_at,
+    updatedAt: subtask.updated_at,
+    finishedAt: subtask.finished_at,
   }
 }
 
@@ -891,11 +1146,22 @@ export async function getTaskDetail(taskId: string) {
   if (!task) return null
   const agent = agentForTask(task)
   const events = db
-    .prepare('SELECT * FROM events WHERE task_id = ? ORDER BY created_at DESC LIMIT 120')
-    .all(taskId) as Array<Record<string, unknown>>
+    .prepare(
+      `SELECT e.*, a.name AS agent_name FROM events e
+       LEFT JOIN agents a ON a.id = e.agent_id
+       WHERE e.task_id = ? ORDER BY e.created_at DESC LIMIT 120`,
+    )
+    .all(taskId) as Array<Record<string, unknown> & { agent_name: string | null }>
   const approvals = db
     .prepare('SELECT * FROM approvals WHERE task_id = ? ORDER BY created_at DESC')
     .all(taskId) as ApprovalRow[]
+  const subtasks = db
+    .prepare(
+      `SELECT s.*, a.name AS agent_name FROM subtasks s
+       LEFT JOIN agents a ON a.id = s.agent_id
+       WHERE s.task_id = ? ORDER BY s.created_at ASC`,
+    )
+    .all(taskId) as Array<SubtaskRow & { agent_name: string | null }>
 
   let messages: unknown[] = []
   let historyError: string | null = null
@@ -915,7 +1181,7 @@ export async function getTaskDetail(taskId: string) {
       : null,
     events: events.map((event) => ({
       ...publicStoredEvent(event),
-      agentName: agent?.name ?? null,
+      agentName: event.agent_name,
     })),
     approvals: approvals.map((approval) => ({
       id: approval.id,
@@ -928,6 +1194,7 @@ export async function getTaskDetail(taskId: string) {
       resolvedBy: approval.resolved_by,
       error: approval.error,
     })),
+    subtasks: subtasks.map(publicSubtask),
     messages,
     historyError,
   }
@@ -1148,6 +1415,7 @@ export async function cancelTask(taskId: string, actor: string) {
       "UPDATE tasks SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE id = ?",
     ).run(now(), now(), taskId)
     expireApprovals(taskId, 'La tarea fue cancelada')
+    finishSubtasks(taskId, 'cancelled', 'La tarea padre fue cancelada')
     audit(actor, 'task.cancel', 'task', taskId, { confirmed: true })
     recordEvent({
       agentId: task.agent_id,
@@ -1217,7 +1485,7 @@ export async function respondToApproval(
       remember,
     })
     recordEvent({
-      agentId: task.agent_id,
+      agentId: approval.agent_id,
       connectionId: task.connection_id,
       taskId: task.id,
       sessionId: approval.session_id,
@@ -1226,13 +1494,13 @@ export async function respondToApproval(
       message: decision === 'approve' ? 'Aprobación concedida por el operador' : 'Aprobación rechazada por el operador',
       payload: { approvalId, decision, remember },
     })
-    recomputeAgentStatus(task.agent_id)
+    recomputeAgentStatus(approval.agent_id)
     return { ok: true as const, confirmed: true }
   } catch (error) {
     const message = errorMessage(error)
     audit(actor, 'approval.respond.failed', 'approval', approvalId, { decision, error: message })
     recordEvent({
-      agentId: task.agent_id,
+      agentId: approval.agent_id,
       connectionId: task.connection_id,
       taskId: task.id,
       sessionId: approval.session_id,

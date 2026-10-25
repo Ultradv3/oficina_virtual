@@ -83,6 +83,7 @@ Decisiones clave:
 - **Estados en el 3D**: el monitor muestra una interfaz de sesión con el color de estado, la lámpara y el LED emiten, el anillo de selección y la etiqueta cambian, y la minifigura reacciona (teclea, levanta la mano, inclina la cabeza).
 - **Iluminación**: clave cálida direccional con sombra 2048 px y frustum ajustado, relleno frontal suave, rim frío, dos lámparas de escritorio con luz puntual, `ACESFilmicToneMapping`, sombras PCF y entorno `RoomEnvironment` vía PMREM para reflejos plásticos.
 - **Legibilidad**: etiquetas tipo placa LEGO con nombre y estado, halos emisivos en pantallas y foco, sombras de contacto bajo el mobiliario y fondo de estudio con viñeta.
+- **Escala**: hasta 9 agentes en 3 columnas y hasta 12 en 4 columnas. Al crecer se amplían suelo/alfombra, se recalcula el encuadre y se retiran lounge, café y rack si invadirían escritorios. Más de 12 requiere plantas adicionales (siguiente fase).
 - **Referencias**: composición y materiales inspirados en el showroom isométrico *The Lego Verse* (Behance) y en las guías de iluminación/sombras/materiales de threejsresources.
 
 ---
@@ -213,11 +214,24 @@ Para añadir Hermes/CLI genérico en una fase posterior:
 
 El núcleo (`runtime.ts`, API y UI) no cambia.
 
+### Equipo orquestado en Markdown
+
+El equipo vive en `.opencode/agents/`, un archivo `.md` por agente:
+
+- `orchestrator.md`: agente por defecto; planifica, usa `todowrite` y delega con `task`.
+- `builder.md`: implementa y ejecuta pruebas.
+- `reviewer.md`: revisión independiente sin editar.
+- `tester.md`: valida sin editar.
+
+`opencode.json` fija `"model": "deepseek/deepseek-flash"` y `"default_agent": "orchestrator"`. Los workers usan `mode: all`, así que también aparecen como escritorios. El orquestador tiene `edit: deny` y `permission.task` limitado a esos tres workers; los workers tienen `task: deny` para evitar delegaciones recursivas.
+
+Agent Office sigue las sesiones hijas de la herramienta `task`: crea `subtasks`, atribuye eventos, aprobaciones y cancelaciones al worker correcto y muestra la delegación en el detalle de la tarea. Por defecto oculta los nativos `build` y `plan` para mostrar solo el equipo; el botón **Nativos** del panel los vuelve a mostrar. La guía para añadir o modificar agentes está en `docs/AGENTS.md`.
+
 ---
 
 ## 9. Persistencia y auditoría
 
-SQLite en `data/agent-office.db` (WAL). Tablas: `connections`, `agents`, `tasks`, `events`, `approvals`, `audit_log`.
+SQLite en `data/agent-office.db` (WAL). Tablas: `connections`, `agents`, `tasks`, `subtasks`, `events`, `approvals`, `audit_log`.
 
 - Los eventos se limitan a 20.000 (se purgan los más antiguos).
 - La auditoría registra actor, acción, entidad, detalle redactado y timestamp.
@@ -288,6 +302,8 @@ server/
   middleware/auth.ts            token Bearer
   plugins/runtime.ts            arranque de adaptadores
   utils/                        DB, runtime, hub SSE, auditoría, redacción
+.opencode/agents/               agentes OpenCode en Markdown
+docs/AGENTS.md                  guía para añadir y gestionar agentes
 docker-compose.yml
 Dockerfile / Dockerfile.opencode
 ```
@@ -305,6 +321,10 @@ Contra `opencode 1.19.0` y Three.js r186:
 - Aprobaciones duplicadas deduplicadas y expiración al cerrar la tarea.
 - Reconexión automática probada deteniendo y reiniciando el servidor OpenCode (estado `error` → `connected` sin intervención).
 - SSE y refresco de UI sin errores de consola.
+- Orquestador `.md` (`default_agent`) delegando en `reviewer` y `builder` mediante `task`.
+- Sesiones hijas creadas como `subtasks`, con el worker en `working` y su tarea delegada visible.
+- Aprobación solicitada dentro de una sesión hija, respondida y atribuida al worker correcto.
+- Layout adaptativo probado con 6 escritorios: rejilla 3×2, reubicación de props y encuadre automático.
 - Rediseño visual LEGO probado en escritorio y móvil (selección, etiquetas de estado y panel).
 - `nuxt typecheck` y `nuxt build` limpios.
 - Build de producción ejecutado con token: `/api/state` responde `401` sin Bearer y `200` con él.
@@ -312,7 +332,42 @@ Contra `opencode 1.19.0` y Three.js r186:
 
 ---
 
-## 14. Referencias técnicas
+## 14. UI premium y sistema de diseño
+
+- **Tipografía**: Inter Variable y JetBrains Mono Variable self-hosted en `public/fonts` (OFL-1.1),
+  precargadas; escala y tokens documentados en `docs/DESIGN.md`.
+- **Tokens**: color, tipografía, espaciado 4/8/12/16/24/32, radios 8/10/14, easings y duraciones
+  120/180/250 ms. Los textos pequeños cumplen contraste AA (≥4.5:1); `--muted-2` y el estado
+  `disconnected` se corrigieron para ello.
+- **Estados**: vacío, carga y error diseñados para escena, panel, listas, actividad, aprobaciones,
+  auditoría y sesión, con reintento sin dobles envíos.
+- **Escena**: encuadre automático con margen de HUD, entrada dolly de 600–900 ms, suelo/viñeta,
+  bloom selectivo con `RenderPipeline` de `three/webgpu` (apagado automático si no se sostienen
+  55 fps durante 2 s a 1024x768 con 3 agentes), etiquetas/pantallas 2x y materiales con desgaste
+  acotado.
+- **Identidad**: avatar derivado del minifig (retrato en `RenderTarget` con respaldo SVG), reloj
+  real, pizarra con tareas reales, luz reactiva y sonido ambiental opcional apagado por defecto.
+- **Accesibilidad**: foco visible, trampa de foco con Escape en diálogos/cajón, `prefers-reduced-
+  motion` respetado en CSS y escena, cajón del panel a ≤640 px.
+- **Verificación**: protocolo manual en `specs/001-premium-ui-scene/quickstart.md` (V1–V9);
+  `npm run typecheck` y `npm run build` como puertas del proyecto.
+
+## 15. Calidad y pruebas
+
+- **Puerta única**: `npm run verify` ejecuta ESLint, Vitest, `typecheck` y build.
+- **Unitarias**: `npm run test:unit` cubre encuadre (0/1/2/3+/10 agentes), layout de escritorios,
+  distribución 1/2/3 de monitores, paredes, presupuesto de rendimiento y formateo de estados/tiempos.
+- **Rendimiento**: 55 fps objetivo con calidad adaptativa (DPR, sombras y bloom); detalle y
+  verificación en `docs/PERFORMANCE.md`. La escena expone `data-quality` y `data-fps`.
+- **E2E + accesibilidad**: `npm run test:e2e` usa Playwright con `/api/state` simulado (no requiere
+  OpenCode) y comprueba escena, panel lateral, hora, skip-link y `axe` sin violaciones críticas.
+  En Windows usa Edge del sistema; con otro navegador define `PLAYWRIGHT_CHANNEL` o ejecuta
+  `npx playwright install chromium`.
+- **CI**: `.github/workflows/ci.yml` ejecuta lint, unitarias, typecheck, build y E2E en cada push/PR.
+- **Accesibilidad**: listado semántico de agentes, skip-link, `aria-live` de resumen, pestañas con
+  `tablist`/`tabpanel` y foco visible; cubierto por el escaneo `axe`.
+
+## 16. Referencias técnicas
 
 - Cámara ortográfica para isometría: <https://threejsresources.com/guides/camera>
 - Raycasting para selección de escritorios: <https://threejsresources.com/guides/raycaster>

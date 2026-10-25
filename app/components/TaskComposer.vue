@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useOffice } from '~/composables/useOffice'
+import { useFocusTrap } from '~/composables/useFocusTrap'
 
 const props = defineProps<{
   open: boolean
@@ -10,6 +11,8 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const office = useOffice()
+const card = ref<HTMLElement>()
+const { activate, deactivate } = useFocusTrap({ onEscape: () => emit('close') })
 const form = reactive({ agentId: '', title: '', prompt: '' })
 const error = ref<string | null>(null)
 
@@ -25,8 +28,11 @@ const eligibleAgents = computed(
 
 watch(
   () => props.open,
-  (open) => {
-    if (!open) return
+  async (open) => {
+    if (!open) {
+      deactivate()
+      return
+    }
     error.value = null
     form.title = ''
     form.prompt = ''
@@ -34,9 +40,16 @@ watch(
       ? office.state.value?.agents.find((agent) => agent.id === props.agentId)
       : null
     const fallback =
-      eligibleAgents.value.find((agent) => agent.status === 'available') ?? eligibleAgents.value[0]
+      eligibleAgents.value.find(
+        (agent) => agent.name === 'orchestrator' || agent.externalId === 'orchestrator',
+      ) ??
+      eligibleAgents.value.find((agent) => agent.status === 'available') ??
+      eligibleAgents.value[0]
     form.agentId = requested?.id ?? fallback?.id ?? ''
+    await nextTick()
+    activate(card.value)
   },
+  { immediate: true },
 )
 
 const selectedAgent = computed(
@@ -74,7 +87,7 @@ async function submit() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="modal" role="presentation" @click.self="emit('close')">
-      <section class="modal__card" role="dialog" aria-modal="true" aria-labelledby="composer-title">
+      <section ref="card" class="modal__card" role="dialog" aria-modal="true" aria-labelledby="composer-title">
         <header class="modal__head">
           <div>
             <p class="eyebrow">Nueva ejecución</p>

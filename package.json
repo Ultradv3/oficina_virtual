@@ -8,6 +8,13 @@
     "start": "node .output/server/index.mjs",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck",
+    "lint": "eslint . --max-warnings=0",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "verify": "npm run lint && npm run test:unit && npm run typecheck && npm run build",
     "postinstall": "nuxt prepare"
   },
   "engines": {
@@ -24,9 +31,14 @@
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@nuxt/eslint": "^1.17.0",
+    "@playwright/test": "^1.64.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/three": "^0.186.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "typescript": "^5.9.3",
+    "vitest": "^5.0.5",
     "vue-tsc": "^3.3.13"
   }
 }

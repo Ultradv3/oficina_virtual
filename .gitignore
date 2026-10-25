@@ -13,3 +13,6 @@ verify-*.png
 oc-serve.log
 dev.log
 .opencode-docker
+test-results
+playwright-report
+coverage

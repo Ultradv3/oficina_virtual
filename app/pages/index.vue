@@ -2,6 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useOffice } from '~/composables/useOffice'
 import { statusMeta, STATUS_META } from '~/utils/status'
+import { QUALITY_PROFILES, type QualityLevel } from '~/utils/perf-budget'
+import StageState from '~/components/StageState.vue'
+import SoundToggle from '~/components/SoundToggle.vue'
 
 definePageMeta({ ssr: false })
 
@@ -12,6 +15,20 @@ useHead({
 const office = useOffice()
 const composerOpen = ref(false)
 const composerAgent = ref<string | null>(null)
+const panelOpen = ref(false)
+const sceneQuality = ref<{ level: QualityLevel; fps: number } | null>(null)
+const SIDEBAR_KEY = 'agent-office-sidebar-collapsed'
+
+function readSidebarPreference(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(SIDEBAR_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const sidebarCollapsed = ref(readSidebarPreference())
 
 const agents = computed(() => office.state.value?.agents ?? [])
 const counts = computed(() => office.state.value?.counts)
@@ -29,6 +46,40 @@ const canCreate = computed(() =>
 
 const primaryConnection = computed(() => connections.value[0] ?? null)
 
+const accessibilitySummary = computed(() => {
+  const current = counts.value
+  return `${agents.value.length} agentes. ${current?.working ?? 0} trabajando, ${current?.waiting_approval ?? 0} esperando aprobación, ${current?.error ?? 0} con error.`
+})
+
+const stageState = computed<'loading' | 'empty' | 'error'>(() => {
+  if (office.loadError.value) return 'error'
+  if (office.loading.value) return 'loading'
+  return 'empty'
+})
+
+const stageCause = computed(
+  () => primaryConnection.value?.error ?? office.loadError.value ?? undefined,
+)
+
+const stageActionLabel = computed(() =>
+  primaryConnection.value ? 'Reconectar ahora' : 'Reintentar',
+)
+
+const stageBusy = computed(
+  () =>
+    office.refreshing.value ||
+    (primaryConnection.value
+      ? office.busy.value === `reconnect:${primaryConnection.value.id}`
+      : false),
+)
+
+async function retryStage() {
+  if (primaryConnection.value) {
+    await office.reconnect(primaryConnection.value.id)
+  }
+  await office.retryState()
+}
+
 const legend = computed(() =>
   (Object.keys(STATUS_META) as Array<keyof typeof STATUS_META>).map((key) => ({
     key,
@@ -40,6 +91,15 @@ onMounted(() => {
   void office.bootstrap()
 })
 
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  try {
+    localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed.value ? '1' : '0')
+  } catch {
+    // La preferencia es cosmética: si no se puede persistir, la sesión sigue.
+  }
+}
+
 onBeforeUnmount(() => {
   office.dispose()
 })
@@ -48,10 +108,17 @@ function openComposer(agentId: string | null = null) {
   composerAgent.value = agentId
   composerOpen.value = true
 }
+
+function onSceneQuality(level: QualityLevel, fps: number) {
+  sceneQuality.value = { level, fps }
+}
 </script>
 
 <template>
   <div class="app-shell">
+    <a class="skip-link" href="#office-workspace">Saltar al contenido principal</a>
+    <p class="sr-only" role="status" aria-live="polite">{{ accessibilitySummary }}</p>
+
     <header class="topbar">
       <div class="brand-block">
         <span class="brand-mark" aria-hidden="true">
@@ -113,6 +180,30 @@ function openComposer(agentId: string | null = null) {
           {{ office.sseConnected.value ? 'En vivo' : 'Sin stream' }}
         </span>
 
+        <SoundToggle />
+
+        <button
+          type="button"
+          class="btn btn--ghost btn--sm sidebar-toggle"
+          :aria-expanded="!sidebarCollapsed"
+          aria-controls="agent-panel"
+          :title="sidebarCollapsed ? 'Mostrar panel lateral' : 'Ocultar panel lateral'"
+          :aria-label="sidebarCollapsed ? 'Mostrar panel lateral' : 'Ocultar panel lateral'"
+          @click="toggleSidebar"
+        >
+          {{ sidebarCollapsed ? 'Mostrar panel' : 'Ocultar panel' }}
+        </button>
+
+        <button
+          type="button"
+          class="btn btn--ghost btn--sm panel-toggle"
+          :aria-expanded="panelOpen"
+          aria-controls="agent-panel"
+          @click="panelOpen = !panelOpen"
+        >
+          Panel
+        </button>
+
         <button
           type="button"
           class="btn btn--primary"
@@ -124,43 +215,41 @@ function openComposer(agentId: string | null = null) {
       </div>
     </header>
 
-    <main class="workspace">
-      <section class="stage">
+    <main id="office-workspace" class="workspace" :class="{ 'is-panel-hidden': sidebarCollapsed }" tabindex="-1">
+      <section class="stage" aria-label="Oficina de agentes">
         <OfficeScene
           v-if="hasAgents"
           :agents="agents"
+          :tasks="office.state.value?.tasks ?? []"
           :selected-id="office.selectedId.value"
+          aria-hidden="true"
+          @quality="onSceneQuality"
           @select="office.selectAgent($event)"
         />
 
-        <div v-if="!hasAgents && !office.loading.value" class="empty-stage">
-          <div class="empty-card">
-            <span class="empty-card__icon" aria-hidden="true">◍</span>
-            <h1>La oficina está vacía</h1>
-            <p>
-              No hay agentes conectados. Inicia un servidor de OpenCode y vuelve a intentar la
-              conexión.
-            </p>
-            <code class="empty-card__code">opencode serve --port 4096</code>
-            <p v-if="primaryConnection?.error" class="empty-card__error">
-              {{ primaryConnection.error }}
-            </p>
-            <button
-              v-if="primaryConnection"
-              type="button"
-              class="btn btn--primary"
-              :disabled="office.busy.value === `reconnect:${primaryConnection.id}`"
-              @click="office.reconnect(primaryConnection.id)"
-            >
-              Reconectar ahora
-            </button>
-          </div>
-        </div>
+        <StageState
+          v-if="!hasAgents"
+          :state="stageState"
+          :cause="stageCause"
+          :action-label="stageActionLabel"
+          :busy="stageBusy"
+          @action="retryStage"
+        />
 
-        <div v-if="office.loading.value" class="stage-loading">
-          <span class="spinner" aria-hidden="true" />
-          Preparando la oficina…
-        </div>
+        <section class="sr-only" aria-labelledby="accessible-agents-title">
+          <h2 id="accessible-agents-title">Agentes y estados</h2>
+          <ul>
+            <li v-for="agent in agents" :key="agent.id">
+              <button
+                type="button"
+                :aria-pressed="office.selectedId.value === agent.id"
+                @click="office.selectAgent(agent.id)"
+              >
+                {{ agent.name }} — {{ statusMeta(agent.status).label }} — {{ agent.currentTask ?? 'sin tarea activa' }}
+              </button>
+            </li>
+          </ul>
+        </section>
 
         <div class="stage-hud">
           <div class="stage-hud__top">
@@ -179,12 +268,28 @@ function openComposer(agentId: string | null = null) {
             <p class="stage-hint">
               Clic en un escritorio para supervisar · Arrastra para desplazar · Rueda para zoom
             </p>
+            <span
+              v-if="sceneQuality && sceneQuality.fps > 0"
+              class="scene-quality"
+              :data-quality="sceneQuality.level"
+              :title="`Calidad de escena: ${QUALITY_PROFILES[sceneQuality.level].label}`"
+              aria-hidden="true"
+            >
+              Calidad {{ QUALITY_PROFILES[sceneQuality.level].label }} · {{ sceneQuality.fps }} fps
+            </span>
           </div>
         </div>
       </section>
 
-      <AgentPanel @new-task="openComposer($event)" />
+      <AgentPanel
+        id="agent-panel"
+        :drawer-open="panelOpen"
+        @new-task="openComposer($event)"
+        @close-drawer="panelOpen = false"
+      />
     </main>
+
+    <div v-if="panelOpen" class="drawer-backdrop" @click="panelOpen = false" />
 
     <TaskComposer
       :open="composerOpen"

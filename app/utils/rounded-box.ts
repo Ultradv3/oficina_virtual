@@ -1,4 +1,5 @@
-import { BoxGeometry, BufferAttribute, Vector3 } from 'three/webgpu'
+import { BoxGeometry, Vector3 } from 'three/webgpu'
+import type { BufferAttribute } from 'three/webgpu'
 
 /**
  * Puerto local de `RoundedBoxGeometry` (three/examples/jsm/geometries/

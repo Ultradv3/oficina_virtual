@@ -1,0 +1,85 @@
+{
+  "serverTime": 1760000000000,
+  "connections": [
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "adapter": "opencode",
+      "enabled": true,
+      "status": "connected",
+      "error": null,
+      "lastConnectedAt": 1759999999000,
+      "config": {
+        "baseUrl": "http://127.0.0.1:4096",
+        "directory": "",
+        "username": "opencode",
+        "model": ""
+      }
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent-orchestrator",
+      "name": "orchestrator",
+      "externalId": "orchestrator",
+      "connectionId": "opencode",
+      "connectionName": "OpenCode",
+      "status": "available",
+      "statusReason": null,
+      "mode": "primary",
+      "description": "Planifica y delega el trabajo.",
+      "capabilities": ["agents:list", "tasks:create", "history:read"],
+      "metadata": { "native": false },
+      "lastSeenAt": 1759999999000,
+      "currentTask": null,
+      "pendingApprovals": 0,
+      "updatedAt": 1759999999000
+    },
+    {
+      "id": "agent-builder",
+      "name": "builder",
+      "externalId": "builder",
+      "connectionId": "opencode",
+      "connectionName": "OpenCode",
+      "status": "working",
+      "statusReason": null,
+      "mode": "all",
+      "description": "Implementa cambios asignados.",
+      "capabilities": ["agents:list", "tasks:create", "history:read"],
+      "metadata": { "native": false },
+      "lastSeenAt": 1759999999000,
+      "currentTask": {
+        "id": "task-1",
+        "title": "Implementar prueba E2E",
+        "status": "running",
+        "createdAt": 1759999990000,
+        "sessionId": "ses_e2e_builder"
+      },
+      "pendingApprovals": 0,
+      "updatedAt": 1759999999000
+    }
+  ],
+  "counts": {
+    "available": 1,
+    "working": 1,
+    "waiting_approval": 0,
+    "error": 0,
+    "disconnected": 0
+  },
+  "approvals": [],
+  "tasks": [
+    {
+      "id": "task-1",
+      "agentId": "agent-builder",
+      "agentName": "builder",
+      "title": "Implementar prueba E2E",
+      "status": "running",
+      "sessionId": "ses_e2e_builder",
+      "error": null,
+      "createdAt": 1759999990000,
+      "updatedAt": 1759999999000,
+      "finishedAt": null
+    }
+  ],
+  "events": []
+}

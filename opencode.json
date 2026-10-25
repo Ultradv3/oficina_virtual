@@ -1,23 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-flash",
+  "default_agent": "orchestrator",
   "mcp": {
     "threejsresources": {
       "type": "remote",
       "url": "https://threejsresources.com/api/mcp",
       "enabled": true
     }
-  },
-  "agent": {
-    "reviewer": {
-      "description": "Revisor de código y PRs",
-      "mode": "primary",
-      "model": "deepseek/deepseek-flash",
-      "prompt": "Eres un revisor senior. Analiza riesgos, calidad y tests.",
-      "tools": {
-        "write": false,
-        "edit": false
-      }
-    }
   }
 }
-

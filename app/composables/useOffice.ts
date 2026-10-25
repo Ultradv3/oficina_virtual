@@ -18,14 +18,55 @@ const state = shallowRef<OfficeState | null>(null)
 const detail = shallowRef<AgentDetail | null>(null)
 const taskDetail = shallowRef<TaskDetail | null>(null)
 const audit = shallowRef<AuditEntry[]>([])
+const auditLoading = ref(false)
+const auditError = ref<string | null>(null)
 const toasts = ref<ToastItem[]>([])
 const selectedId = ref<string | null>(null)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
+const detailError = ref<string | null>(null)
+const refreshing = ref(false)
 const sseConnected = ref(false)
 const streaming = ref(false)
 const taskLoading = ref(false)
 const busy = ref<string | null>(null)
+const showNativeAgents = ref(false)
+
+const NATIVE_AGENTS_KEY = 'agent-office-show-native'
+
+function readNativePreference(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(NATIVE_AGENTS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistNativePreference(value: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(NATIVE_AGENTS_KEY, value ? '1' : '0')
+  } catch {
+    // localStorage puede no estar disponible; la preferencia sigue en memoria.
+  }
+}
+
+function applyNativeFilter(data: OfficeState): OfficeState {
+  if (showNativeAgents.value) return data
+  const agents = data.agents.filter((agent) => agent.metadata?.native !== true)
+  // Si no existe equipo propio, no ocultamos la única oficina disponible.
+  if (agents.length === 0) return data
+  const counts = {
+    available: 0,
+    working: 0,
+    waiting_approval: 0,
+    error: 0,
+    disconnected: 0,
+  } as OfficeState['counts']
+  for (const agent of agents) counts[agent.status] += 1
+  return { ...data, agents, counts }
+}
 
 let source: EventSource | null = null
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -73,7 +114,12 @@ function toast(message: string, level: ToastLevel = 'info') {
 
 async function refreshState(): Promise<void> {
   try {
-    state.value = await api<OfficeState>('/api/state')
+    const data = await api<OfficeState>('/api/state')
+    state.value = applyNativeFilter(data)
+    if (selectedId.value && !state.value.agents.some((agent) => agent.id === selectedId.value)) {
+      selectedId.value = null
+      detail.value = null
+    }
     loadError.value = null
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : String(error)
@@ -93,12 +139,26 @@ function scheduleRefresh() {
 async function refreshDetail(): Promise<void> {
   if (!selectedId.value) {
     detail.value = null
+    detailError.value = null
     return
   }
   try {
     detail.value = await api<AgentDetail>(`/api/agents/${selectedId.value}`)
-  } catch {
+    detailError.value = null
+  } catch (error) {
     detail.value = null
+    detailError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function retryState(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await refreshState()
+    await refreshDetail()
+  } finally {
+    refreshing.value = false
   }
 }
 
@@ -250,21 +310,44 @@ function closeTask() {
 }
 
 async function refreshAudit() {
+  auditLoading.value = true
+  auditError.value = null
   try {
     const result = await api<{ entries: AuditEntry[] }>('/api/audit?limit=120')
     audit.value = result.entries
   } catch (error) {
-    toast(error instanceof Error ? error.message : String(error), 'error')
+    const message = error instanceof Error ? error.message : String(error)
+    auditError.value = message
+    toast(message, 'error')
+  } finally {
+    auditLoading.value = false
   }
 }
 
 async function bootstrap() {
+  showNativeAgents.value = readNativePreference()
   connect()
   await refreshState()
   if (state.value?.agents.length && !selectedId.value) {
-    const first =
-      state.value.agents.find((agent) => agent.status === 'working') ?? state.value.agents[0]
-    if (first) await selectAgent(first.id)
+    const agents = state.value.agents
+    const preferred =
+      agents.find((agent) => agent.name === 'orchestrator' || agent.externalId === 'orchestrator') ??
+      agents.find((agent) => agent.status === 'working') ??
+      agents[0]
+    if (preferred) await selectAgent(preferred.id)
+  }
+}
+
+async function toggleNativeAgents(): Promise<void> {
+  showNativeAgents.value = !showNativeAgents.value
+  persistNativePreference(showNativeAgents.value)
+  await refreshState()
+  if (selectedId.value && !state.value?.agents.some((agent) => agent.id === selectedId.value)) {
+    const agents = state.value?.agents ?? []
+    const preferred =
+      agents.find((agent) => agent.name === 'orchestrator' || agent.externalId === 'orchestrator') ??
+      agents[0]
+    await selectAgent(preferred?.id ?? null)
   }
 }
 
@@ -285,18 +368,25 @@ export function useOffice() {
     detail,
     taskDetail,
     audit,
+    auditLoading,
+    auditError,
     toasts,
     selectedId,
     loading,
     loadError,
+    detailError,
+    refreshing,
     sseConnected,
     streaming,
     taskLoading,
     busy,
+    showNativeAgents,
     bootstrap,
     dispose,
     refreshState,
     refreshDetail,
+    toggleNativeAgents,
+    retryState,
     refreshAudit,
     selectAgent,
     createTask,

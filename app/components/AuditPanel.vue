@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { useOffice } from '~/composables/useOffice'
-import { formatDateTime } from '~/utils/status'
+import PanelState from './PanelState.vue'
+import { formatAbsolute, timeAgo, toIso } from '~/utils/status'
 
 const props = defineProps<{ active: boolean }>()
 
@@ -31,7 +32,9 @@ watch(
       <li v-for="entry in office.audit.value" :key="entry.id" class="audit__item">
         <div class="audit__row">
           <span class="audit__action">{{ entry.action }}</span>
-          <time>{{ formatDateTime(entry.createdAt) }}</time>
+          <time :datetime="toIso(entry.createdAt)" :title="formatAbsolute(entry.createdAt)">
+            {{ timeAgo(entry.createdAt) }}
+          </time>
         </div>
         <p class="audit__meta">
           <span>{{ entry.actor }}</span>
@@ -42,6 +45,14 @@ watch(
         <pre v-if="entry.detail" class="audit__detail">{{ JSON.stringify(entry.detail, null, 1) }}</pre>
       </li>
     </ul>
-    <p v-else class="empty-note">Sin acciones registradas todavía.</p>
+    <PanelState
+      v-else
+      :state="office.auditError.value ? 'error' : office.auditLoading.value ? 'loading' : 'empty'"
+      :title="office.auditError.value ? 'No se pudo cargar la auditoría' : 'Sin acciones registradas todavía.'"
+      :message="office.auditError.value ?? undefined"
+      action-label="Reintentar"
+      :busy="office.auditLoading.value"
+      @action="office.refreshAudit()"
+    />
   </div>
 </template>
