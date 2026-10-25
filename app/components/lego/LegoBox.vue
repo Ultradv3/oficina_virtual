@@ -1,6 +1,24 @@
+<script lang="ts">
+import { RoundedBoxGeometry } from '~/utils/rounded-box'
+
+// Caché de geometrías a nivel de MÓDULO y no por componente: todos los bricks
+// comparten las mismas pocas geometrías (una por radio redondeado) y se crean
+// una única vez para toda la vida de la app. Nunca se disponen.
+const geometryCache = new Map<number, RoundedBoxGeometry>()
+
+function getBrickGeometry(radius: number): RoundedBoxGeometry {
+  const key = Math.round(radius * 100)
+  const cached = geometryCache.get(key)
+  if (cached) return cached
+  const geometry = new RoundedBoxGeometry(1, 1, 1, 3, radius)
+  geometryCache.set(key, geometry)
+  return geometry
+}
+</script>
+
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { getLegoMaterial } from '~/utils/lego-materials'
 
 const props = withDefaults(
   defineProps<{
@@ -33,37 +51,29 @@ const props = withDefaults(
   },
 )
 
-const cache = new Map<number, RoundedBoxGeometry>()
-
-function geometryFor(radius: number): RoundedBoxGeometry {
-  const key = Math.round(radius * 100)
-  const existing = cache.get(key)
-  if (existing) return existing
-  const geometry = new RoundedBoxGeometry(1, 1, 1, 3, radius)
-  cache.set(key, geometry)
-  return geometry
-}
-
-const geometry = computed(() => geometryFor(props.radius))
+const geometry = computed(() => getBrickGeometry(props.radius))
+// Material compartido por firma visual (color/rugosidad/metal/emisivo/opacidad):
+// los bricks reutilizan la misma instancia en lugar de crear una por mesh.
+const material = computed(() =>
+  getLegoMaterial({
+    color: props.color,
+    roughness: props.roughness,
+    metalness: props.metalness,
+    emissive: props.emissive,
+    emissiveIntensity: props.emissiveIntensity,
+    opacity: props.opacity,
+  }),
+)
 </script>
 
 <template>
   <TresMesh
     :geometry="geometry"
+    :material="material"
     :scale="size"
     :position="position"
     :rotation="rotation"
     :cast-shadow="castShadow"
     :receive-shadow="receiveShadow"
-  >
-    <TresMeshStandardMaterial
-      :color="color"
-      :roughness="roughness"
-      :metalness="metalness"
-      :emissive="emissive"
-      :emissive-intensity="emissiveIntensity"
-      :transparent="opacity < 1"
-      :opacity="opacity"
-    />
-  </TresMesh>
+  />
 </template>

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { OrbitControls } from '@tresjs/cientos'
+import { OrbitControls } from '@tresjs/cientos/webgpu'
 import {
   ACESFilmicToneMapping,
   CanvasTexture,
   PCFShadowMap,
   SRGBColorSpace,
   type DirectionalLight,
-} from 'three'
+} from 'three/webgpu'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { OfficeAgent } from '~/types/office'
 import { LEGO } from '~/utils/lego'
@@ -50,6 +50,10 @@ function configureKeyLight(light: DirectionalLight) {
   light.shadow.normalBias = 0.028
   light.shadow.radius = 3
   light.shadow.camera.updateProjectionMatrix()
+  // La escena es estática salvo los minifigs: el shadow map se calcula una vez
+  // y no se vuelve a renderizar en cada frame.
+  light.shadow.autoUpdate = false
+  light.shadow.needsUpdate = true
 }
 
 watch(
@@ -230,7 +234,7 @@ const mosaicColors = [
     <TresCanvas
       :alpha="true"
       :clear-alpha="0"
-      :dpr="[1, 2]"
+      :dpr="[1, 1.75]"
       :shadows="true"
       :shadow-map-type="PCFShadowMap"
       :tone-mapping="ACESFilmicToneMapping"
@@ -280,7 +284,7 @@ const mosaicColors = [
 
       <TresMesh :rotation="[-Math.PI / 2, 0, 0]" :position="[0, -0.61, 0]" :render-order="-1">
         <TresPlaneGeometry :args="[25, 18]" />
-        <TresMeshBasicMaterial
+        <TresMeshBasicNodeMaterial
           :map="groundShadow"
           :transparent="true"
           :opacity="0.85"
@@ -310,7 +314,7 @@ const mosaicColors = [
       <LegoBox :position="[0, -0.32, 6.33]" :size="[7.2, 0.54, 0.1]" :color="LEGO.charcoal" :radius="0.03" />
       <TresMesh :position="[0, -0.32, 6.385]">
         <TresPlaneGeometry :args="[6.9, 0.44]" />
-        <TresMeshBasicMaterial :map="baseSignTexture" :tone-mapped="false" />
+        <TresMeshBasicNodeMaterial :map="baseSignTexture" :tone-mapped="false" />
       </TresMesh>
 
       <!-- Back wall -->
@@ -356,7 +360,7 @@ const mosaicColors = [
         <LegoBox :position="[0, 0, 0.07]" :size="[4.2, 1.02, 0.1]" :color="LEGO.navy" :radius="0.02" />
         <TresMesh :position="[0, 0, 0.13]">
           <TresPlaneGeometry :args="[3.95, 0.86]" />
-          <TresMeshBasicMaterial :map="signTexture" :tone-mapped="false" />
+          <TresMeshBasicNodeMaterial :map="signTexture" :tone-mapped="false" />
         </TresMesh>
       </TresGroup>
 
@@ -373,7 +377,7 @@ const mosaicColors = [
           ]"
         >
           <TresBoxGeometry :args="[0.38, 0.36, 0.04]" />
-          <TresMeshStandardMaterial :color="tone" :roughness="0.28" />
+          <TresMeshStandardNodeMaterial :color="tone" :roughness="0.28" />
         </TresMesh>
       </TresGroup>
 
@@ -413,7 +417,7 @@ const mosaicColors = [
         <LegoBox :position="[0.06, 0, 0]" :size="[0.12, 2.1, 1.4]" :color="LEGO.blue" :radius="0.02" />
         <TresMesh :position="[0.14, 0, 0.48]">
           <TresSphereGeometry :args="[0.06, 12, 10]" />
-          <TresMeshStandardMaterial :color="LEGO.gold" :roughness="0.25" :metalness="0.4" />
+          <TresMeshStandardNodeMaterial :color="LEGO.gold" :roughness="0.25" :metalness="0.4" />
         </TresMesh>
       </TresGroup>
 
@@ -441,7 +445,7 @@ const mosaicColors = [
         </template>
         <TresMesh :position="[0.22, 0.53, 0.08]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.08, 0.07, 0.16, 14]" />
-          <TresMeshStandardMaterial :color="LEGO.white" :roughness="0.28" />
+          <TresMeshStandardNodeMaterial :color="LEGO.white" :roughness="0.28" />
         </TresMesh>
         <LegoBox :position="[-0.24, 0.5, -0.1]" :size="[0.3, 0.05, 0.22]" :color="LEGO.yellow" :radius="0.02" />
       </TresGroup>
@@ -467,7 +471,7 @@ const mosaicColors = [
           :position="[-0.3 + (light % 3) * 0.3, 1.55 - Math.floor(light / 3) * 0.42, 0.48]"
         >
           <TresBoxGeometry :args="[0.2, 0.05, 0.03]" />
-          <TresMeshStandardMaterial
+          <TresMeshStandardNodeMaterial
             :color="light % 2 === 0 ? LEGO.green : LEGO.cyan"
             :emissive="light % 2 === 0 ? LEGO.green : LEGO.cyan"
             :emissive-intensity="1.6"
@@ -476,11 +480,11 @@ const mosaicColors = [
         </TresMesh>
         <TresMesh :position="[-0.42, 2.02, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.08, 0.08, 0.06, 16]" />
-          <TresMeshStandardMaterial :color="LEGO.lightGray" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.lightGray" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[0.42, 2.02, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.08, 0.08, 0.06, 16]" />
-          <TresMeshStandardMaterial :color="LEGO.lightGray" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.lightGray" :roughness="0.3" />
         </TresMesh>
       </TresGroup>
 
@@ -488,27 +492,27 @@ const mosaicColors = [
       <TresGroup :position="[5.6, 0, 2.6]">
         <TresMesh :position="[0, 0.68, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.78, 0.78, 0.1, 28]" />
-          <TresMeshStandardMaterial :color="LEGO.warmWhite" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.warmWhite" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[0, 0.63, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.8, 0.8, 0.04, 28]" />
-          <TresMeshStandardMaterial :color="LEGO.navy" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.navy" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[0, 0.3, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.07, 0.09, 0.62, 12]" />
-          <TresMeshStandardMaterial :color="LEGO.charcoal" :roughness="0.35" />
+          <TresMeshStandardNodeMaterial :color="LEGO.charcoal" :roughness="0.35" />
         </TresMesh>
         <TresMesh :position="[0, 0.04, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.38, 0.42, 0.08, 18]" />
-          <TresMeshStandardMaterial :color="LEGO.charcoal" :roughness="0.35" />
+          <TresMeshStandardNodeMaterial :color="LEGO.charcoal" :roughness="0.35" />
         </TresMesh>
         <TresMesh :position="[0.24, 0.82, 0.12]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.08, 0.07, 0.16, 14]" />
-          <TresMeshStandardMaterial :color="LEGO.white" :roughness="0.28" />
+          <TresMeshStandardNodeMaterial :color="LEGO.white" :roughness="0.28" />
         </TresMesh>
         <TresMesh :position="[-0.24, 0.8, -0.16]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.07, 0.06, 0.14, 14]" />
-          <TresMeshStandardMaterial :color="LEGO.red" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.red" :roughness="0.3" />
         </TresMesh>
         <TresGroup
           v-for="(stool, index) in stools"
@@ -517,11 +521,11 @@ const mosaicColors = [
         >
           <TresMesh :position="[0, 0.42, 0]" :cast-shadow="true">
             <TresCylinderGeometry :args="[0.3, 0.3, 0.1, 20]" />
-            <TresMeshStandardMaterial :color="index === 0 ? LEGO.red : LEGO.azure" :roughness="0.3" />
+            <TresMeshStandardNodeMaterial :color="index === 0 ? LEGO.red : LEGO.azure" :roughness="0.3" />
           </TresMesh>
           <TresMesh :position="[0, 0.2, 0]" :cast-shadow="true">
             <TresCylinderGeometry :args="[0.045, 0.055, 0.4, 10]" />
-            <TresMeshStandardMaterial :color="LEGO.charcoal" :roughness="0.3" />
+            <TresMeshStandardNodeMaterial :color="LEGO.charcoal" :roughness="0.3" />
           </TresMesh>
         </TresGroup>
       </TresGroup>
@@ -536,11 +540,11 @@ const mosaicColors = [
         <LegoBox :position="[0, 0.36, 0]" :size="[0.8, 0.08, 0.56]" :color="LEGO.yellow" :radius="0.02" />
         <TresMesh :position="[-0.18, 0.47, 0.1]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.08, 0.08, 0.18, 14]" />
-          <TresMeshStandardMaterial :color="LEGO.red" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.red" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[0.18, 0.45, -0.08]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.08, 0.08, 0.18, 14]" />
-          <TresMeshStandardMaterial :color="LEGO.green" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.green" :roughness="0.3" />
         </TresMesh>
       </TresGroup>
 
@@ -565,7 +569,7 @@ const mosaicColors = [
           <LegoBox :position="[0, 0.3, 0]" :size="[0.5, 0.05, 0.34]" :color="LEGO.white" :radius="0.02" />
           <TresMesh :position="[0.2, 0.18, 0.21]">
             <TresBoxGeometry :args="[0.08, 0.03, 0.02]" />
-            <TresMeshStandardMaterial :color="LEGO.green" :emissive="LEGO.green" :emissive-intensity="1.4" :tone-mapped="false" />
+            <TresMeshStandardNodeMaterial :color="LEGO.green" :emissive="LEGO.green" :emissive-intensity="1.4" :tone-mapped="false" />
           </TresMesh>
         </TresGroup>
       </TresGroup>
@@ -580,7 +584,7 @@ const mosaicColors = [
           :cast-shadow="true"
         >
           <TresCylinderGeometry :args="[0.09, 0.09, 0.06, 14]" />
-          <TresMeshStandardMaterial :color="LEGO.yellow" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.yellow" :roughness="0.3" />
         </TresMesh>
       </TresGroup>
 

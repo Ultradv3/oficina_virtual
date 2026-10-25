@@ -2,6 +2,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-10-24',
   devtools: { enabled: true },
   modules: ['@tresjs/nuxt'],
+  // Renderer WebGPU de three r186 (node materials). Si el navegador/equipo no
+  // expone WebGPU, WebGPURenderer cae automáticamente al backend WebGL2.
+  tres: {
+    renderer: 'webgpu',
+  },
   css: ['~/assets/css/main.css'],
   typescript: {
     strict: true,

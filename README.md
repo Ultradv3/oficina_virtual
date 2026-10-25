@@ -1,4 +1,4 @@
-﻿# Agent Office
+# Agent Office
 
 Oficina virtual isométrica tipo LEGO para **visualizar, supervisar y controlar agentes de IA** ejecutados mediante OpenCode (y, en fases posteriores, Hermes y otros CLI compatibles).
 
@@ -71,6 +71,8 @@ Decisiones clave:
 - **Eventos**: el adaptador consume `/event`, normaliza y el runtime persiste y difunde. Solo se persisten eventos de sesiones gestionadas por Agent Office (evita ruido de otras TUIs).
 - **SSE** en lugar de WebSocket: unidireccional, resiliente y suficiente para refrescar estado.
 - **SQLite + WAL**: persistencia local, transaccional y portable para un único nodo.
+- **Renderer WebGPU** (`tres: { renderer: 'webgpu' }` en `nuxt.config.ts`): la escena usa node materials de `three/webgpu`. Si el navegador no expone WebGPU, `WebGPURenderer` arranca solo con el backend WebGL2 manteniendo el mismo código y materiales.
+- **Escena optimizada**: materiales y geometrías de bricks compartidos por caché de módulo, shadow map estático (la escena es fija salvo los minifigs) y DPR limitado a 1.75. Las texturas de estado (etiqueta/pantalla/glow) solo se regeneran cuando cambia nombre o estado, no en cada refresco SSE.
 
 ---
 

@@ -6,5 +6,18 @@
       "url": "https://threejsresources.com/api/mcp",
       "enabled": true
     }
+  },
+  "agent": {
+    "reviewer": {
+      "description": "Revisor de código y PRs",
+      "mode": "primary",
+      "model": "deepseek/deepseek-flash",
+      "prompt": "Eres un revisor senior. Analiza riesgos, calidad y tests.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
   }
 }
+

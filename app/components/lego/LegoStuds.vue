@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, shallowRef } from 'vue'
-import { useTresContext } from '@tresjs/core'
+import { useTresContext } from '@tresjs/core/webgpu'
 import {
   CylinderGeometry,
   InstancedMesh,
   Matrix4,
-  MeshStandardMaterial,
+  MeshStandardNodeMaterial,
   Quaternion,
   Vector3,
-} from 'three'
+} from 'three/webgpu'
 
 const props = withDefaults(
   defineProps<{
@@ -29,13 +29,13 @@ const props = withDefaults(
 const { scene } = useTresContext()
 const mesh = shallowRef<InstancedMesh>()
 let geometry: CylinderGeometry | null = null
-let material: MeshStandardMaterial | null = null
+let material: MeshStandardNodeMaterial | null = null
 
 onMounted(() => {
   if (!props.positions.length) return
   geometry = new CylinderGeometry(props.radius, props.radius, props.height, 18)
   geometry.translate(0, props.height / 2, 0)
-  material = new MeshStandardMaterial({
+  material = new MeshStandardNodeMaterial({
     color: props.color,
     roughness: props.roughness,
     metalness: 0,

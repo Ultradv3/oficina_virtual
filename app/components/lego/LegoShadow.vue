@@ -1,24 +1,10 @@
-<script setup lang="ts">
-import { onBeforeUnmount } from 'vue'
-import {
-  CanvasTexture,
-  MeshBasicMaterial,
-  PlaneGeometry,
-  SRGBColorSpace,
-} from 'three'
+<script lang="ts">
+import { CanvasTexture, MeshBasicNodeMaterial, PlaneGeometry, SRGBColorSpace } from 'three/webgpu'
 
-const props = withDefaults(
-  defineProps<{
-    position?: [number, number, number]
-    size?: [number, number]
-    opacity?: number
-  }>(),
-  {
-    position: () => [0, 0.005, 0],
-    size: () => [2, 2],
-    opacity: 0.35,
-  },
-)
+// Recursos compartidos a nivel de MÓDULO: una sola geometría, una sola textura
+// y un material por opacidad (la opacidad varía entre instancias). Nunca se
+// disponen al desmontar.
+const geometry = new PlaneGeometry(1, 1)
 
 type ShadowGlobal = typeof globalThis & { __legoShadow?: CanvasTexture }
 
@@ -43,20 +29,42 @@ function getTexture(): CanvasTexture {
   return created
 }
 
-const geometry = new PlaneGeometry(1, 1)
-const material = new MeshBasicMaterial({
-  map: getTexture(),
-  transparent: true,
-  opacity: props.opacity,
-  depthWrite: false,
-  toneMapped: false,
-})
-const rotation: [number, number, number] = [-Math.PI / 2, 0, 0]
+const materialCache = new Map<number, MeshBasicNodeMaterial>()
 
-onBeforeUnmount(() => {
-  geometry.dispose()
-  material.dispose()
-})
+function getShadowMaterial(opacity: number): MeshBasicNodeMaterial {
+  const key = Math.round(opacity * 100)
+  const cached = materialCache.get(key)
+  if (cached) return cached
+  const material = new MeshBasicNodeMaterial({
+    map: getTexture(),
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    toneMapped: false,
+  })
+  materialCache.set(key, material)
+  return material
+}
+</script>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = withDefaults(
+  defineProps<{
+    position?: [number, number, number]
+    size?: [number, number]
+    opacity?: number
+  }>(),
+  {
+    position: () => [0, 0.005, 0],
+    size: () => [2, 2],
+    opacity: 0.35,
+  },
+)
+
+const material = computed(() => getShadowMaterial(props.opacity))
+const rotation: [number, number, number] = [-Math.PI / 2, 0, 0]
 </script>
 
 <template>

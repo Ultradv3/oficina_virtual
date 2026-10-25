@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, shallowRef } from 'vue'
-import { MathUtils, type Group } from 'three'
+import { MathUtils, type Group } from 'three/webgpu'
 import { useLoop } from '@tresjs/core'
 import type { AgentStatus } from '~/types/office'
 import { LEGO, minifigHair, minifigTorso, minifigVariant } from '~/utils/lego'
@@ -116,7 +116,7 @@ onRender(({ elapsed }) => {
         />
         <TresMesh :position="[0, -0.33, 0]" :cast-shadow="true">
           <TresSphereGeometry :args="[0.075, 16, 12]" />
-          <TresMeshStandardMaterial :color="LEGO.skin" :roughness="0.32" />
+          <TresMeshStandardNodeMaterial :color="LEGO.skin" :roughness="0.32" />
         </TresMesh>
       </TresGroup>
       <TresGroup ref="armRight" :position="[0.295, 1.02, 0]" :rotation="[-0.9, 0, 0]">
@@ -127,59 +127,59 @@ onRender(({ elapsed }) => {
         />
         <TresMesh :position="[0, -0.33, 0]" :cast-shadow="true">
           <TresSphereGeometry :args="[0.075, 16, 12]" />
-          <TresMeshStandardMaterial :color="LEGO.skin" :roughness="0.32" />
+          <TresMeshStandardNodeMaterial :color="LEGO.skin" :roughness="0.32" />
         </TresMesh>
       </TresGroup>
 
       <TresGroup ref="head" :position="[0, 1.16, 0]">
         <TresMesh :position="[0, 0.16, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.2, 0.2, 0.28, 24]" />
-          <TresMeshStandardMaterial :color="LEGO.skin" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.skin" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[0, 0.33, 0]" :cast-shadow="true">
           <TresCylinderGeometry :args="[0.1, 0.1, 0.055, 18]" />
-          <TresMeshStandardMaterial :color="LEGO.skin" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial :color="LEGO.skin" :roughness="0.3" />
         </TresMesh>
 
         <TresMesh :position="[0.075, 0.17, 0.192]" :scale="[1, 1, 0.45]">
           <TresSphereGeometry :args="[0.034, 14, 10]" />
-          <TresMeshStandardMaterial color="#151515" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial color="#151515" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[-0.075, 0.17, 0.192]" :scale="[1, 1, 0.45]">
           <TresSphereGeometry :args="[0.034, 14, 10]" />
-          <TresMeshStandardMaterial color="#151515" :roughness="0.3" />
+          <TresMeshStandardNodeMaterial color="#151515" :roughness="0.3" />
         </TresMesh>
         <TresMesh :position="[0, 0.07, 0.195]">
           <TresBoxGeometry :args="[0.11, 0.022, 0.012]" />
-          <TresMeshStandardMaterial color="#151515" :roughness="0.4" />
+          <TresMeshStandardNodeMaterial color="#151515" :roughness="0.4" />
         </TresMesh>
 
         <template v-if="variant === 0">
           <TresMesh :position="[0, 0.3, 0]" :cast-shadow="false">
             <TresCylinderGeometry :args="[0.27, 0.27, 0.045, 24]" />
-            <TresMeshStandardMaterial :color="LEGO.yellow" :roughness="0.3" />
+            <TresMeshStandardNodeMaterial :color="LEGO.yellow" :roughness="0.3" />
           </TresMesh>
           <TresMesh :position="[0, 0.31, 0]" :scale="[1, 0.75, 1]" :cast-shadow="false">
             <TresSphereGeometry :args="[0.225, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]" />
-            <TresMeshStandardMaterial :color="LEGO.yellow" :roughness="0.3" />
+            <TresMeshStandardNodeMaterial :color="LEGO.yellow" :roughness="0.3" />
           </TresMesh>
         </template>
 
         <template v-else-if="variant === 3">
           <TresMesh :position="[0, 0.29, 0.02]" :cast-shadow="false">
             <TresCylinderGeometry :args="[0.26, 0.26, 0.045, 24]" />
-            <TresMeshStandardMaterial :color="LEGO.navy" :roughness="0.35" />
+            <TresMeshStandardNodeMaterial :color="LEGO.navy" :roughness="0.35" />
           </TresMesh>
           <TresMesh :position="[0, 0.3, 0]" :scale="[1, 0.85, 1]" :cast-shadow="false">
             <TresSphereGeometry :args="[0.22, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]" />
-            <TresMeshStandardMaterial :color="LEGO.navy" :roughness="0.35" />
+            <TresMeshStandardNodeMaterial :color="LEGO.navy" :roughness="0.35" />
           </TresMesh>
         </template>
 
         <template v-else>
           <TresMesh :position="[0, 0.215, -0.01]" :scale="[1.03, 0.9, 1.03]" :cast-shadow="false">
             <TresSphereGeometry :args="[0.215, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2.6]" />
-            <TresMeshStandardMaterial :color="hairColor" :roughness="0.45" />
+            <TresMeshStandardNodeMaterial :color="hairColor" :roughness="0.45" />
           </TresMesh>
           <LegoBox
             :position="[0, 0.17, -0.13]"
@@ -193,19 +193,19 @@ onRender(({ elapsed }) => {
         <template v-if="variant === 1 || variant === 3">
           <TresMesh :position="[0, 0.19, 0]" :rotation="[0, 0, 0]">
             <TresTorusGeometry :args="[0.225, 0.018, 8, 24, Math.PI]" />
-            <TresMeshStandardMaterial color="#232a33" :roughness="0.45" />
+            <TresMeshStandardNodeMaterial color="#232a33" :roughness="0.45" />
           </TresMesh>
           <TresMesh :position="[0.222, 0.16, 0]" :rotation="[0, 0, Math.PI / 2]">
             <TresCylinderGeometry :args="[0.058, 0.058, 0.05, 16]" />
-            <TresMeshStandardMaterial color="#232a33" :roughness="0.45" />
+            <TresMeshStandardNodeMaterial color="#232a33" :roughness="0.45" />
           </TresMesh>
           <TresMesh :position="[-0.222, 0.16, 0]" :rotation="[0, 0, Math.PI / 2]">
             <TresCylinderGeometry :args="[0.058, 0.058, 0.05, 16]" />
-            <TresMeshStandardMaterial color="#232a33" :roughness="0.45" />
+            <TresMeshStandardNodeMaterial color="#232a33" :roughness="0.45" />
           </TresMesh>
           <TresMesh :position="[-0.2, 0.09, 0.12]" :rotation="[0.3, 0, 0.5]">
             <TresCapsuleGeometry :args="[0.012, 0.12, 4, 8]" />
-            <TresMeshStandardMaterial color="#232a33" :roughness="0.45" />
+            <TresMeshStandardNodeMaterial color="#232a33" :roughness="0.45" />
           </TresMesh>
         </template>
 

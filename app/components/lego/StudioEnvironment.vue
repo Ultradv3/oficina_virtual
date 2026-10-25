@@ -1,34 +1,27 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, toRaw } from 'vue'
-import { useLoop, useTresContext } from '@tresjs/core'
-import { PMREMGenerator, WebGLRenderer, type Texture } from 'three'
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { onBeforeUnmount, shallowRef } from 'vue'
+import { useTresContext } from '@tresjs/core/webgpu'
+import type { Texture } from 'three/webgpu'
+import { createStudioEnvironmentTexture } from '~/utils/studio-environment'
 
-const { scene, renderer } = useTresContext()
-const applied = ref(false)
-let environment: Texture | null = null
+const { scene } = useTresContext()
+const environment = shallowRef<Texture>()
+let previous: Texture | null = null
 
-const { onRender } = useLoop()
-
-onRender(() => {
-  if (applied.value) return
-  const maybeRef = renderer as unknown as { value?: WebGLRenderer; instance?: WebGLRenderer }
-  const gl = toRaw(maybeRef?.instance ?? maybeRef?.value ?? renderer)
-  if (!(gl instanceof WebGLRenderer)) return
-  const generator = new PMREMGenerator(gl)
-  const room = new RoomEnvironment()
-  environment = generator.fromScene(room, 0.04).texture
-  scene.value.environment = environment
-  scene.value.environmentIntensity = 0.2
-  room.dispose()
-  generator.dispose()
-  applied.value = true
-})
+// El renderer de three (WebGPU o su fallback WebGL2) convierte la textura
+// equirect en PMREM de forma perezosa, así que no dependemos de PMREMGenerator
+// ni del tipo de renderer. Se aplica una sola vez al montar.
+const texture = createStudioEnvironmentTexture()
+previous = scene.value.environment as Texture | null
+scene.value.environment = texture
+scene.value.environmentIntensity = 0.2
+environment.value = texture
 
 onBeforeUnmount(() => {
-  scene.value.environment = null
-  environment?.dispose()
-  environment = null
+  scene.value.environment = previous
+  environment.value?.dispose()
+  environment.value = undefined
+  previous = null
 })
 </script>
 

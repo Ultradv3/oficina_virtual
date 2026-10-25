@@ -1,0 +1,20 @@
+{
+  "version": "1.0.12",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "dsh",
+    "opencode"
+  ],
+  "integration_settings": {
+    "dsh": {
+      "script": "ps",
+      "invoke_separator": "-"
+    },
+    "opencode": {
+      "script": "ps",
+      "invoke_separator": "."
+    }
+  },
+  "integration": "dsh",
+  "default_integration": "dsh"
+}
